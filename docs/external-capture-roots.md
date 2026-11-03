@@ -43,7 +43,7 @@ tend to be bigger:
 
 | Limit            | Value   |
 | ---------------- | ------- |
-| Capture timeout  | 10 s    |
+| Capture timeout  | 30 s    |
 | Files            | 20,000  |
 | Total bytes read | 768 MiB |
 | Single file      | 64 MiB  |

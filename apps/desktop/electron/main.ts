@@ -994,7 +994,7 @@ app
         configuredUserDataDir,
         // External roots can be larger than a code checkout: allow a full first capture.
         {
-          timeoutMs: 10_000,
+          timeoutMs: 30_000,
           maxFiles: 20_000,
           maxBytes: 768 * 1024 * 1024,
           maxFileBytes: 64 * 1024 * 1024,
