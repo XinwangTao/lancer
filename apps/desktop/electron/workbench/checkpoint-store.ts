@@ -145,6 +145,13 @@ export interface ListedTurnCheckpoint extends ResolvedTurnCheckpoint {
   readonly entryIds: readonly string[];
 }
 
+export interface CheckpointStoreOptions {
+  /** Subdirectory under userData; separate stores must not share metadata. */
+  readonly subdirectory?: string;
+  /** Capture this fixed root instead of each boundary's workspace checkout. */
+  readonly rootOverride?: { readonly path: string; readonly checkoutId: string };
+}
+
 /** Owns immutable snapshot objects and small interval metadata, never the user's Git state. */
 export class TurnCheckpointStore {
   readonly repositoryPath: string;
@@ -152,6 +159,7 @@ export class TurnCheckpointStore {
   private readonly metadataPath: string;
   private readonly limits: CheckpointCaptureLimits;
   private readonly retention: CheckpointRetention;
+  private readonly rootOverride: CheckpointStoreOptions["rootOverride"];
   private readonly records = new Map<string, StoredTurnCheckpoint>();
   private loaded: Promise<void> | undefined;
   private gitReady: Promise<void> | undefined;
@@ -177,10 +185,12 @@ export class TurnCheckpointStore {
     userDataDir: string,
     limits: Partial<CheckpointCaptureLimits> = {},
     retention: Partial<CheckpointRetention> = {},
+    options: CheckpointStoreOptions = {},
   ) {
-    this.directory = join(userDataDir, "turn-checkpoints");
+    this.directory = join(userDataDir, options.subdirectory ?? "turn-checkpoints");
     this.repositoryPath = join(this.directory, "objects.git");
     this.metadataPath = join(this.directory, "checkpoints.json");
+    this.rootOverride = options.rootOverride;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
     this.retention = { ...DEFAULT_RETENTION, ...retention };
     if (Object.values(this.limits).some((value) => !Number.isSafeInteger(value) || value < 1)) {
@@ -203,8 +213,14 @@ export class TurnCheckpointStore {
   recordBoundary(boundary: TurnCaptureBoundary, signal: AbortSignal): Promise<void> {
     // Same-task boundaries never overlap (each is awaited), so resolving the queue key first
     // cannot reorder them; paths reaching one checkout through symlinks share its queue.
-    const operation = checkoutRoot(boundary.workspace.path).then((checkoutPath) =>
-      this.enqueue(checkoutPath, () => this.recordInQueue(boundary, checkoutPath, signal)),
+    const operation = (
+      this.rootOverride
+        ? Promise.resolve(this.rootOverride.path)
+        : checkoutRoot(boundary.workspace.path)
+    ).then((checkoutPath) =>
+      this.enqueue(checkoutPath, () =>
+        this.recordInQueue(boundary, checkoutPath, signal, this.rootOverride?.checkoutId),
+      ),
     );
     const task = targetKey(boundary.sessionRef);
     const settled = operation.then(
@@ -225,8 +241,10 @@ export class TurnCheckpointStore {
     boundary: TurnCaptureBoundary,
     checkoutPath: string,
     signal: AbortSignal,
+    checkoutIdOverride?: string,
   ): Promise<void> {
     await this.load();
+    const checkoutId = checkoutIdOverride ?? boundary.workspace.workspaceId;
     const { opening, closing } = boundary;
     if (!opening && !closing) return;
     // Validate the entire transition before changing either interval. A late/replayed
@@ -245,7 +263,7 @@ export class TurnCheckpointStore {
     const makeRecord = (anchor: NonNullable<typeof opening>): StoredTurnCheckpoint => ({
       checkpointId: anchor.checkpointId,
       target: { ...boundary.sessionRef },
-      checkoutId: boundary.workspace.workspaceId,
+      checkoutId,
       checkoutPath,
       runtimeGeneration: boundary.runtimeGeneration,
       runId: boundary.runId,
@@ -266,7 +284,7 @@ export class TurnCheckpointStore {
       if (
         existing &&
         (!sameTarget(existing.target, boundary.sessionRef) ||
-          existing.checkoutId !== boundary.workspace.workspaceId ||
+          existing.checkoutId !== checkoutId ||
           existing.runtimeGeneration !== boundary.runtimeGeneration ||
           existing.runId !== boundary.runId)
       )
@@ -295,7 +313,7 @@ export class TurnCheckpointStore {
     // This boundary writes metadata once, after the capture. If the app exits first, a closed
     // interval stays durably open and an opening is absent or pending (another checkout's
     // write may include it); restart marks either one interrupted, never complete.
-    const capture = await this.capture(boundary.workspace.path, signal);
+    const capture = await this.capture(checkoutPath, signal);
     const safeCapture = signal.aborted
       ? unavailableCapture(
           "capture-aborted",

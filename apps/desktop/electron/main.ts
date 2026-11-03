@@ -24,7 +24,13 @@ import type {
   ExtensionContext,
   ExtensionToolContext,
 } from "@earendil-works/pi-coding-agent";
-import { constants as fsConstants, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  constants as fsConstants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -941,6 +947,65 @@ app
     const orchestrationRuntimeBridge = createStoreBackedOrchestrationRuntimeBridge();
     const scheduledTaskRuntimeBridge = createStoreBackedScheduledTaskRuntimeBridge();
     const checkpoints = new TurnCheckpointStore(configuredUserDataDir);
+    // Extra capture roots (for example a knowledge base) so files outside the workspace
+    // still appear in the same turn card and GitTree. Env wins; otherwise read the UTF-8
+    // JSON config (userData/extra-capture-roots.json) so non-ASCII paths never pass
+    // through a shell.
+    interface ExtraCaptureRoot {
+      readonly path: string;
+      readonly label: string;
+    }
+    const extraCaptureRoots = (() => {
+      const fromEnv = (process.env.LANCER_EXTRA_CAPTURE_ROOTS ?? "")
+        .split(";")
+        .map((root) => root.trim())
+        .filter(Boolean);
+      if (fromEnv.length)
+        return fromEnv.map((root) => ({ path: root, label: path.basename(root) }));
+      try {
+        const config = JSON.parse(
+          readFileSync(path.join(configuredUserDataDir, "extra-capture-roots.json"), "utf8"),
+        ) as { roots?: unknown };
+        if (!Array.isArray(config.roots)) return [];
+        return config.roots.flatMap((entry): ExtraCaptureRoot[] => {
+          if (typeof entry === "string" && entry.trim()) {
+            const rootPath = entry.trim();
+            return [{ path: rootPath, label: path.basename(rootPath) }];
+          }
+          if (entry && typeof entry === "object") {
+            const root = entry as { path?: unknown; label?: unknown };
+            if (typeof root.path !== "string" || !root.path.trim()) return [];
+            const rootPath = root.path.trim();
+            const label =
+              typeof root.label === "string" && root.label.trim()
+                ? root.label.trim()
+                : path.basename(rootPath);
+            return [{ path: rootPath, label }];
+          }
+          return [];
+        });
+      } catch {
+        return [];
+      }
+    })();
+    const extraCaptureStores = extraCaptureRoots.map((root, index) => ({
+      label: root.label,
+      source: new TurnCheckpointStore(
+        configuredUserDataDir,
+        // External roots can be larger than a code checkout: allow a full first capture.
+        {
+          timeoutMs: 10_000,
+          maxFiles: 20_000,
+          maxBytes: 768 * 1024 * 1024,
+          maxFileBytes: 64 * 1024 * 1024,
+        },
+        {},
+        {
+          subdirectory: `turn-checkpoints-external-${index}`,
+          rootOverride: { path: root.path, checkoutId: `external:${index}` },
+        },
+      ),
+    }));
     const extensionViews: DesktopExtensionViewOwner = new DesktopExtensionViewOwner({
       frameDocument: extensionFrameDocument,
       hostAssets: {
@@ -967,7 +1032,13 @@ app
     const driverOptions: NonNullable<
       ConstructorParameters<typeof DesktopAppStore>[0]["driverOptions"]
     > = {
-      onTurnCaptureBoundary: (boundary, signal) => checkpoints.recordBoundary(boundary, signal),
+      onTurnCaptureBoundary: async (boundary, signal) => {
+        await checkpoints.recordBoundary(boundary, signal);
+        for (const { source } of extraCaptureStores) {
+          // An external root must never block the workspace boundary or the turn itself.
+          await source.recordBoundary(boundary, signal).catch(() => undefined);
+        }
+      },
       // The store bounds each capture from when it starts; this only stops a stuck boundary,
       // including one waiting behind another run's capture in the same checkout.
       turnCaptureTimeoutMs: TURN_CAPTURE_BACKSTOP_MS,
@@ -1162,6 +1233,7 @@ app
         extensionViews,
         review: new ReviewOwner({
           checkpoints,
+          extraCaptureSources: extraCaptureStores,
           userDataDir: app.getPath("userData"),
           resolveCheckoutPath: (checkoutId) => store.getWorkspacePath(checkoutId),
           validateTask: (target) =>

@@ -90,6 +90,10 @@ export interface TurnChangedFile {
   readonly previousPath?: string;
   /** Line counts; binary files have none. */
   readonly lines: ReviewLineCounts | null;
+  /** Capture root that produced this row; omitted for the workspace checkout. */
+  readonly origin?: "workspace" | "external";
+  /** Display label of the external capture root, such as a knowledge-base name. */
+  readonly originLabel?: string;
 }
 
 /** What one captured agent turn changed, anchored to that turn's transcript entries. */

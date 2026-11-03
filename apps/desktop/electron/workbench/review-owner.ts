@@ -55,11 +55,19 @@ export interface ListedTurn extends ReviewCheckpoint {
   readonly entryIds: readonly string[];
 }
 
+export interface ExtraCaptureSource {
+  /** Display label, for example a knowledge-base name. */
+  readonly label: string;
+  readonly source: ReviewCheckpointSource;
+}
+
 export interface ReviewOwnerOptions {
   readonly userDataDir: string;
   readonly resolveCheckoutPath: (checkoutId: string) => string | undefined;
   readonly validateTask: (target: SessionRef) => boolean;
   readonly checkpoints?: ReviewCheckpointSource;
+  /** Extra capture roots (for example a knowledge base) merged into the same turn card. */
+  readonly extraCaptureSources?: readonly ExtraCaptureSource[];
 }
 
 interface OwnedReview {
@@ -80,6 +88,7 @@ export class ReviewOwner {
   private readonly reviewed: ReviewedStore;
   private readonly mutations = new Map<string, Promise<void>>();
   private readonly turnFiles = new Map<string, Promise<readonly TurnChangedFile[]>>();
+  private readonly extraTurnFiles = new Map<string, Promise<readonly TurnChangedFile[]>>();
 
   constructor(private readonly options: ReviewOwnerOptions) {
     this.reviewed = new ReviewedStore(options.userDataDir);
@@ -91,19 +100,44 @@ export class ReviewOwner {
         return unavailable("task-unavailable", "This task is unavailable.");
       }
       const turns = (await this.options.checkpoints?.listTurns?.(input.target)) ?? [];
+      const extraTurns = (
+        await Promise.all(
+          (this.options.extraCaptureSources ?? []).map(async ({ label, source }) => {
+            const listed = (await source.listTurns?.(input.target)) ?? [];
+            return listed.map((turn) => ({ label, turn }));
+          }),
+        )
+      ).flat();
+      const extraByCheckpoint = new Map<string, { label: string; turn: ListedTurn }[]>();
+      for (const entry of extraTurns) {
+        const list = extraByCheckpoint.get(entry.turn.checkpointId);
+        if (list) list.push(entry);
+        else extraByCheckpoint.set(entry.turn.checkpointId, [entry]);
+      }
       const summaries = await Promise.all(
         turns.map(async (turn): Promise<TurnChangeSummary | null> => {
+          // Workspace and external captures fail independently; either side alone still shows.
+          const files: TurnChangedFile[] = [];
           try {
-            return {
-              checkpointId: turn.checkpointId,
-              checkoutId: turn.checkoutId,
-              entryIds: turn.entryIds,
-              files: await this.turnChangedFiles(turn),
-            };
+            files.push(...(await this.turnChangedFiles(turn)));
           } catch {
-            // One unreadable capture drops only its own card; its Review still reports why.
-            return null;
+            // The Review still reports why this capture is unavailable.
           }
+          for (const entry of extraByCheckpoint.get(turn.checkpointId) ?? []) {
+            try {
+              files.push(...(await this.extraChangedFiles(entry.turn, entry.label)));
+            } catch {
+              // A skipped knowledge root never removes the workspace card.
+            }
+          }
+          return files.length
+            ? {
+                checkpointId: turn.checkpointId,
+                checkoutId: turn.checkoutId,
+                entryIds: turn.entryIds,
+                files,
+              }
+            : null;
         }),
       );
       return {
@@ -126,6 +160,28 @@ export class ReviewOwner {
         const oldest = this.turnFiles.keys().next().value;
         if (oldest === undefined) break;
         this.turnFiles.delete(oldest);
+      }
+    }
+    return files;
+  }
+
+  private extraChangedFiles(turn: ListedTurn, label: string): Promise<readonly TurnChangedFile[]> {
+    const key = `${label}:${turn.checkpointId}`;
+    let files = this.extraTurnFiles.get(key);
+    if (!files) {
+      files = summarizeGitTreeChanges(
+        turn.repositoryPath,
+        turn.beforeTreeOid,
+        turn.afterTreeOid,
+      ).then((rows) =>
+        rows.map((file) => ({ ...file, origin: "external" as const, originLabel: label })),
+      );
+      files.catch(() => this.extraTurnFiles.delete(key));
+      this.extraTurnFiles.set(key, files);
+      while (this.extraTurnFiles.size > MAX_CACHED_TURN_SUMMARIES) {
+        const oldest = this.extraTurnFiles.keys().next().value;
+        if (oldest === undefined) break;
+        this.extraTurnFiles.delete(oldest);
       }
     }
     return files;
