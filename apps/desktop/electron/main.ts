@@ -115,7 +115,9 @@ const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 const appTestMode = resolveAppTestMode(process.env.PI_APP_TEST_MODE);
 const windowTestMode = appTestMode ?? "foreground";
 const devReloadMarkersEnabled = process.env.PI_APP_DEV_RELOAD_MARKERS === "1";
-const TURN_CAPTURE_BACKSTOP_MS = 10_000;
+// Each store bounds its own capture; this only stops a boundary that is truly stuck.
+// External roots may need longer than a workspace checkout for their first full pass.
+const TURN_CAPTURE_BACKSTOP_MS = 45_000;
 let store: DesktopAppStore;
 let extensionViewOwner: DesktopExtensionViewOwner | undefined;
 let windowOwner: WindowOwner;
