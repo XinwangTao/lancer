@@ -968,6 +968,27 @@
   background: var(--overlay-hover);
 }
 
+.turn-changes__file:disabled {
+  cursor: default;
+}
+
+.turn-changes__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.turn-changes__origin {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--overlay-hover);
+  color: var(--muted-path);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
 .turn-changes__file:focus-visible,
 .turn-changes__review:focus-visible {
   outline: 2px solid var(--accent);

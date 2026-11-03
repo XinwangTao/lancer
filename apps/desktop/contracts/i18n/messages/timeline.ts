@@ -43,6 +43,7 @@ export const timelineMessages = defineMessages(
     "timeline.turnChanges.review": "Review",
     "timeline.turnChanges.showMore": "Show {count} more",
     "timeline.turnChanges.binary": "Binary",
+    "timeline.turnChanges.external": "External",
 
     "timeline.fork.eyebrow": "Fork conversation",
     "timeline.fork.title": "Start a new thread",
@@ -171,6 +172,7 @@ export const timelineMessages = defineMessages(
     "timeline.turnChanges.review": "审阅",
     "timeline.turnChanges.showMore": "显示其余 {count} 个",
     "timeline.turnChanges.binary": "二进制",
+    "timeline.turnChanges.external": "外部",
 
     "timeline.fork.eyebrow": "分叉对话",
     "timeline.fork.title": "开始新会话",

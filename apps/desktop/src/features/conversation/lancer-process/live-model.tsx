@@ -1,4 +1,5 @@
 import { BranchReturnCard } from "./branch-return-card";
+import { externalCaptureEvents } from "./external-capture-events";
 import { moduleZones } from "../../../../contracts/lancer-modules";
 import { conversationRoot } from "../../../../contracts/lancer-assistants";
 import { modelFamily } from "../../../ui/model-families";
@@ -229,6 +230,18 @@ export function buildLiveProcessData(input: LiveProcessInput): {
     }
     messages[id] = list;
   }
+  // Files from extra capture roots (for example a knowledge base) live outside the
+  // workspace checkout, so they produce no native trajectory node. Surface each one as
+  // its own commit point in the selected lane.
+  events.push(
+    ...externalCaptureEvents({
+      turns: input.turns,
+      lane: current,
+      laneNodes: input.trajectory.laneNodes.get(current) ?? [],
+      laneLength: longestLane,
+      fallbackLabel: t("timeline.turnChanges.external"),
+    }),
+  );
   for (const lane of represented) {
     const error = input.trajectory.errorsBySessionId?.[lane.sessionId];
     if (error)

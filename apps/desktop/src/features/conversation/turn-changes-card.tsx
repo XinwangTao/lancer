@@ -27,7 +27,7 @@ export function TurnChangesCard({
     }),
     { added: 0, removed: 0 },
   );
-  const firstFile = files[0];
+  const firstFile = files.find((file) => file.origin !== "external");
 
   return (
     <section
@@ -60,21 +60,40 @@ export function TurnChangesCard({
         ) : null}
       </header>
       <ul className="turn-changes__files" ref={listRef}>
-        {shown.map((file) => (
-          <li key={file.path}>
-            <button
-              type="button"
-              className="turn-changes__file"
-              data-file-path={file.path}
-              disabled={!onOpen}
-              title={file.previousPath ? `${file.previousPath} → ${file.path}` : file.path}
-              onClick={() => onOpen?.(turn, file.path)}
-            >
-              <FilePath path={file.path} />
-              <FileStats file={file} />
-            </button>
-          </li>
-        ))}
+        {shown.map((file) => {
+          const external = file.origin === "external";
+          const originLabel = file.originLabel ?? t("timeline.turnChanges.external");
+          return (
+            <li key={`${file.origin ?? "workspace"}:${file.path}`}>
+              <button
+                type="button"
+                className="turn-changes__file"
+                data-file-path={file.path}
+                disabled={!onOpen || external}
+                title={
+                  external
+                    ? `${originLabel} · ${file.path}`
+                    : file.previousPath
+                      ? `${file.previousPath} → ${file.path}`
+                      : file.path
+                }
+                onClick={() => {
+                  if (!external) onOpen?.(turn, file.path);
+                }}
+              >
+                {external ? (
+                  <span className="turn-changes__label">
+                    <span className="turn-changes__origin">{originLabel}</span>
+                    <FilePath path={file.path} />
+                  </span>
+                ) : (
+                  <FilePath path={file.path} />
+                )}
+                <FileStats file={file} />
+              </button>
+            </li>
+          );
+        })}
         {hidden ? (
           <li>
             <button
