@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { TurnCaptureBoundary } from "@lancer/session-driver";
+import { summarizeGitTreeChanges } from "../../electron/platform/files/git-review";
 import {
   TurnCheckpointStore,
   type CheckpointCapture,
@@ -779,4 +780,39 @@ test("retention caps records, deletes unneeded refs and prunes their objects", a
   expect(await git(store.repositoryPath, ["show", `${after.treeOid}:file.txt`])).toEqual(
     Buffer.from("unique contents of turn 3"),
   );
+});
+
+test("a fixed root override captures an external checkout instead of the workspace", async () => {
+  const { directory, workspace, userData } = await fixture();
+  const external = join(directory, "external");
+  await mkdir(external);
+  await git(external, ["init", "--template=", "--initial-branch=main"]);
+  await git(external, ["config", "user.name", "Checkpoint Test"]);
+  await git(external, ["config", "user.email", "checkpoint@example.test"]);
+  await writeFile(join(external, "note.md"), "before\n");
+  await git(external, ["add", "."]);
+  await git(external, ["commit", "-m", "baseline"]);
+
+  const store = new TurnCheckpointStore(
+    userData,
+    { timeoutMs: 10_000 },
+    {},
+    {
+      subdirectory: "external-store",
+      rootOverride: { path: external, checkoutId: "external:0" },
+    },
+  );
+  const signal = new AbortController().signal;
+  // The boundary workspace is a different checkout; the override must win.
+  await store.recordBoundary(boundary(workspace, "external-turn", "opening"), signal);
+  await writeFile(join(external, "note.md"), "after\n");
+  await store.recordBoundary(boundary(workspace, "external-turn", "closing"), signal);
+
+  const turns = await store.listTurns({ workspaceId: "repo", sessionId: "task" });
+  expect(turns).toHaveLength(1);
+  const turn = turns[0]!;
+  expect(turn.checkoutId).toBe("external:0");
+  await expect(
+    summarizeGitTreeChanges(turn.repositoryPath, turn.beforeTreeOid, turn.afterTreeOid),
+  ).resolves.toEqual([{ path: "note.md", lines: { added: 1, removed: 1 } }]);
 });

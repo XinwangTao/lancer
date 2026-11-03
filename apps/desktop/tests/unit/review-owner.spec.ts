@@ -308,3 +308,77 @@ test("reviewed marks are bounded and forget the oldest acknowledgements first", 
   await store.set(marks[1]!, true);
   expect(await readFile(join(dir, "reviewed-files.json"), "utf8")).toBe(before);
 });
+
+test("turn changes merge files from extra capture roots with their label", async () => {
+  const { checkoutPath, options } = await fixture();
+  const workspaceBefore = await git(checkoutPath, ["rev-parse", "HEAD^{tree}"]);
+  await git(checkoutPath, ["add", "example.txt"]);
+  await git(checkoutPath, ["commit", "-m", "after"]);
+  const workspaceAfter = await git(checkoutPath, ["rev-parse", "HEAD^{tree}"]);
+
+  const externalPath = await mkdtemp(join(tmpdir(), "pi-gui-review-owner-external-"));
+  await git(externalPath, ["init", "-b", "trunk"]);
+  await git(externalPath, ["config", "user.name", "Review Test"]);
+  await git(externalPath, ["config", "user.email", "review@example.invalid"]);
+  await writeFile(join(externalPath, "notes.md"), "one\n");
+  await git(externalPath, ["add", "notes.md"]);
+  await git(externalPath, ["commit", "-m", "baseline"]);
+  const externalBefore = await git(externalPath, ["rev-parse", "HEAD^{tree}"]);
+  await writeFile(join(externalPath, "notes.md"), "two\n");
+  await git(externalPath, ["add", "notes.md"]);
+  await git(externalPath, ["commit", "-m", "after"]);
+  const externalAfter = await git(externalPath, ["rev-parse", "HEAD^{tree}"]);
+
+  const source = (
+    repositoryPath: string,
+    beforeTreeOid: string,
+    afterTreeOid: string,
+  ): ReviewCheckpointSource => ({
+    async listTurns() {
+      return [
+        {
+          state: "available" as const,
+          checkpointId: "captured-turn",
+          checkoutId: "checkout",
+          repositoryPath,
+          beforeTreeOid,
+          afterTreeOid,
+          capturedAt: "2026-09-22T12:00:00.000Z",
+          coverage: { state: "complete" as const, notes: [] },
+          entryIds: ["captured-message"],
+        },
+      ];
+    },
+    async resolve() {
+      throw new Error("resolve is not used by turn summaries");
+    },
+  });
+
+  const owner = new ReviewOwner({
+    ...options,
+    checkpoints: source(checkoutPath, workspaceBefore, workspaceAfter),
+    extraCaptureSources: [
+      { label: "Obsidian", source: source(externalPath, externalBefore, externalAfter) },
+    ],
+  });
+
+  await expect(owner.getTurnChanges({ target: firstTask })).resolves.toEqual({
+    state: "available",
+    turns: [
+      {
+        checkpointId: "captured-turn",
+        checkoutId: "checkout",
+        entryIds: ["captured-message"],
+        files: [
+          { path: "example.txt", lines: { added: 1, removed: 1 } },
+          {
+            path: "notes.md",
+            lines: { added: 1, removed: 1 },
+            origin: "external",
+            originLabel: "Obsidian",
+          },
+        ],
+      },
+    ],
+  });
+});
