@@ -110,8 +110,13 @@ function createCreateChildThreadTool(
       "Start a separate Lancer child thread for a delegated investigation or implementation task.",
     promptSnippet: "Start a separate Lancer child thread for delegated work.",
     promptGuidelines: [
-      "Use create_child_thread when the user asks you to spin up, delegate to, or run a separate child thread.",
-      "Keep the child prompt self-contained: objective, relevant file paths, constraints and acceptance criteria. Never paste the full parent transcript. Child threads start without parent history; results are batched after siblings settle.",
+      "Decide delegation yourself: use create_child_thread when the task splits into at least two independently verifiable deliverables, each worth its own context (roughly more than ten tool calls, or a separate module or file group), and their file sets do not overlap. Read-heavy work can run in parallel; writes must be split by directory or file because child threads share one workspace and have no worktree isolation.",
+      "Size the fan-out to the deliverables: two deliverables, two children; investigation, implementation, and verification may run as three when all three can start now; four or more only for breadth scans whose merge is mechanical. Never spawn more children than independent deliverables, and stay within LANCER_MAX_CONCURRENT_BRANCHES.",
+      "Split by path or module, by breadth (the same rule applied to N items), or by hypothesis (competing diagnoses resolved by evidence). Do not split by phase: when a later step consumes an earlier step's output, run it serially.",
+      "Keep the child prompt self-contained: objective, exact paths, what not to change, acceptance criteria as a command or checkable fact, output format (conclusion plus file:line evidence), and stop when done. Child threads start without parent history; results are batched after siblings settle.",
+      "After dispatch, finish the work that does not depend on children, then collect. A child's conclusion is a claim, not evidence: verify by reading files or running the stated check before merging, resolve conflicts on evidence, and never merge contradictory results. Start a second wave only after the first wave is collected and merged.",
+      "Children must not fan out further unless the dispatched prompt explicitly allows it.",
+      "When you do not fan out, say why in one line (single-point change, dependency chain, overlapping files) instead of silently working alone.",
     ],
     parameters: {
       type: "object",
