@@ -183,6 +183,7 @@ export interface DesktopIpcCapabilities {
   readonly ping: () => string;
   readonly theme: ThemeManager;
   readonly openExternal: (url: string) => Promise<void>;
+  readonly launchLocalApp: (appId: string) => Promise<void>;
   readonly pickWorkspace: (window: BrowserWindow) => Promise<DesktopAppState>;
   readonly createLoginCallbacks: (
     window: BrowserWindow,
@@ -311,6 +312,10 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.openExternal, (event, rawUrl: unknown) => {
     windows.windowForSender(event.sender);
     return capabilities.openExternal(expectString(rawUrl, "url"));
+  });
+  ipcMain.handle(desktopIpc.launchLocalApp, (event, rawAppId: unknown) => {
+    windows.windowForSender(event.sender);
+    return capabilities.launchLocalApp(expectString(rawAppId, "appId"));
   });
   ipcMain.handle(desktopIpc.relaunchApplication, (event) => {
     windows.windowForSender(event.sender);

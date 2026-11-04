@@ -20,6 +20,7 @@ import {
   createDesktopCommandSubscription,
   desktopIpc,
   type PiDesktopApi,
+  type LocalAppId,
   type CustomProviderConfig,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
@@ -555,6 +556,8 @@ contextBridge.exposeInMainWorld("piApp", {
     ) as Promise<void>,
   toggleWindowMaximize: () => ipcRenderer.invoke(desktopIpc.toggleWindowMaximize) as Promise<void>,
   openExternal: (url: string) => ipcRenderer.invoke(desktopIpc.openExternal, url) as Promise<void>,
+  launchLocalApp: (appId: LocalAppId) =>
+    ipcRenderer.invoke(desktopIpc.launchLocalApp, appId) as Promise<void>,
   getThemeMode: () =>
     ipcRenderer.invoke(desktopIpc.getThemeMode) as Promise<"system" | "light" | "dark">,
   getResolvedTheme: () =>

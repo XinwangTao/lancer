@@ -43,6 +43,7 @@ import { performExtensionViewHostAction } from "./extensions/extension-view-acti
 import { extensionFrameDocument } from "./extensions/extension-frame-document";
 import { ReviewOwner } from "./workbench/review-owner";
 import { registerDesktopIpc } from "./ipc/register-desktop-ipc";
+import { startLocalApp } from "./local-app-launcher";
 import {
   createOrchestrationRuntimeExtension,
   createOrchestrationRuntimeTools,
@@ -1239,6 +1240,7 @@ app
           }
           await shell.openExternal(parsed.toString());
         },
+        launchLocalApp: async (appId) => startLocalApp(appId),
         pickWorkspace: (window) => pickWorkspaceViaDialog(window),
         createLoginCallbacks: (window) => createRuntimeLoginCallbacks(window),
         probeCustomProviderModels,
