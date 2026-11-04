@@ -35,6 +35,20 @@ test("workbuddy resolves from the declared program files root", () => {
   expect(resolveLocalAppExecutable("workbuddy", env, fakeFileSystem([executable]))).toBe(
     executable,
   );
+  // Per-user Electron installs live under LocalAppData\Programs.
+  const local = path.join(
+    "C:\\Users\\tester\\AppData\\Local",
+    "Programs",
+    "WorkBuddy",
+    "WorkBuddy.exe",
+  );
+  expect(
+    resolveLocalAppExecutable(
+      "workbuddy",
+      { LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local" } as NodeJS.ProcessEnv,
+      fakeFileSystem([local]),
+    ),
+  ).toBe(local);
   expect(resolveLocalAppExecutable("workbuddy", {}, fakeFileSystem([]))).toBeUndefined();
 });
 

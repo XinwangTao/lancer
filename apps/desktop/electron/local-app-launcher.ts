@@ -48,11 +48,14 @@ const resolvers: Readonly<
   Record<LocalAppId, (env: NodeJS.ProcessEnv, fs: LocalAppFileSystem) => string | undefined>
 > = {
   workbuddy: (env, fs) => {
-    for (const root of installRoots(env)) {
-      const executable = path.join(root, "WorkBuddy", "WorkBuddy.exe");
-      if (fs.exists(executable)) return executable;
-    }
-    return undefined;
+    const candidates = [
+      ...installRoots(env).map((root) => path.join(root, "WorkBuddy", "WorkBuddy.exe")),
+      // Per-user Electron installs put the app under LocalAppData.
+      env["LOCALAPPDATA"]
+        ? path.join(env["LOCALAPPDATA"], "Programs", "WorkBuddy", "WorkBuddy.exe")
+        : undefined,
+    ];
+    return candidates.find((candidate) => candidate !== undefined && fs.exists(candidate));
   },
   marvis: (env, fs) => {
     for (const root of installRoots(env)) {
