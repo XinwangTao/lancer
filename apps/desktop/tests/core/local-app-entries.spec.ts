@@ -34,6 +34,13 @@ test("the model reel lists the companion apps after GLM and offers to open them"
     expect(glm).toBeGreaterThanOrEqual(0);
     expect(anchors.slice(glm + 1)).toEqual(["app:workbuddy", "app:marvis", "app:opencode"]);
 
+    // At the default window size the new group must be on screen, not scrolled off.
+    const row = await reel.locator(".model-catalog__families").boundingBox();
+    const lastApp = await reel.locator('[data-anchor-key="app:opencode"]').boundingBox();
+    expect(row).not.toBeNull();
+    expect(lastApp).not.toBeNull();
+    expect(lastApp!.x + lastApp!.width).toBeLessThanOrEqual(row!.x + row!.width + 1);
+
     const workbuddy = reel.locator('[data-anchor-key="app:workbuddy"]');
     await expect(workbuddy).toHaveAttribute("title", "WorkBuddy · GUI 对话");
     await workbuddy.click();
@@ -81,6 +88,19 @@ test("the app entries keep their affordances on the light surface", async () => 
     const marvis = page.getByTestId("model-reel").locator('[data-anchor-key="app:marvis"]');
     await marvis.click();
     await expect(page.locator(".model-catalog__popover:popover-open")).toContainText("Marvis");
+
+    // The selected app gets the same light-surface highlight as a model family.
+    const selected = await marvis.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        pressed: element.getAttribute("aria-pressed"),
+        background: style.backgroundColor,
+        shadow: style.boxShadow,
+      };
+    });
+    expect(selected.pressed).toBe("true");
+    expect(selected.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(selected.shadow).not.toBe("none");
 
     const probe = await page.evaluate(() => {
       const divider = document.querySelector(".model-catalog__divider");
