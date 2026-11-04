@@ -1,4 +1,5 @@
-// Lobe Icons v1.99.0, MIT. Provider trademarks belong to their owners.
+// Provider marks: Lobe Icons v1.99.0, MIT. Provider trademarks belong to their owners.
+// Companion-app marks (workbuddy, marvis, opencode) are simple stand-ins, not official logos.
 export const MODEL_BRAND_MARKS: Readonly<
   Record<
     string,
