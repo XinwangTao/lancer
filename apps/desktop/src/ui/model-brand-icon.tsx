@@ -6,12 +6,15 @@ import { modelFamily } from "./model-families";
 export function ModelBrandIcon({
   provider,
   modelId,
+  mark,
 }: {
   readonly provider?: string;
   readonly modelId?: string;
+  /** Brand mark to draw when the caller is not a model provider (companion apps). */
+  readonly mark?: string;
 }) {
-  const family = modelFamily(provider, modelId);
-  const icon = family ? MODEL_BRAND_MARKS[family.id] : undefined;
+  const brand = mark ?? modelFamily(provider, modelId)?.id;
+  const icon = brand ? MODEL_BRAND_MARKS[brand] : undefined;
   if (!icon) return <ModelIcon />;
   return (
     <svg {...icon.attributes} aria-hidden="true">

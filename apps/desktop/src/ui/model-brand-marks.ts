@@ -11,6 +11,70 @@ export const MODEL_BRAND_MARKS: Readonly<
     }
   >
 > = {
+  workbuddy: {
+    attributes: {
+      fill: "currentColor",
+      viewBox: "0 0 24 24",
+    },
+    parts: [
+      {
+        tag: "rect",
+        attributes: {
+          x: "2.5",
+          y: "3.6",
+          width: "19",
+          height: "13.2",
+          rx: "2.6",
+          fillOpacity: ".55",
+        },
+      },
+      {
+        tag: "rect",
+        attributes: { x: "6.5", y: "18.2", width: "11", height: "1.9", rx: ".95" },
+      },
+    ],
+  },
+  marvis: {
+    attributes: {
+      fill: "currentColor",
+      viewBox: "0 0 24 24",
+    },
+    parts: [
+      {
+        tag: "path",
+        attributes: {
+          d: "M12 1.6l2.7 6.7 6.7 2.7-6.7 2.7L12 20.4l-2.7-6.7L2.6 11l6.7-2.7z",
+        },
+      },
+      {
+        tag: "circle",
+        attributes: { cx: "12", cy: "11", r: "2.4", fillOpacity: ".45" },
+      },
+    ],
+  },
+  opencode: {
+    attributes: {
+      fill: "currentColor",
+      viewBox: "0 0 24 24",
+    },
+    parts: [
+      {
+        tag: "path",
+        attributes: { d: "M4.8 6.4L13.4 12l-8.6 5.6v-2.9L9 12l-4.2-2.7z" },
+      },
+      {
+        tag: "rect",
+        attributes: {
+          x: "13.2",
+          y: "15.6",
+          width: "6.2",
+          height: "2.2",
+          rx: "1.1",
+          fillOpacity: ".5",
+        },
+      },
+    ],
+  },
   doubao: {
     attributes: {
       fill: "currentColor",

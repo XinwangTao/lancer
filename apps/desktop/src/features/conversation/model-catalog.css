@@ -49,6 +49,18 @@
 .model-catalog__families .unconfigured {
   color: var(--tx3);
 }
+/* Companion apps share the family row, separated instead of dimmed. */
+.model-catalog__divider {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 16px;
+  margin-inline: 6px;
+  background: var(--border-default);
+}
+.model-catalog__popover .model-catalog__error {
+  color: var(--error-ink);
+}
 .model-catalog__current {
   max-width: 150px;
   overflow: hidden;
