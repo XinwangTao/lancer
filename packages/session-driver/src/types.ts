@@ -28,6 +28,7 @@ export interface SessionRuntimeMetadata {
   finishedAt?: string | null;
   /** Durable runtime outcome, separate from the legacy driver status. */
   runtimeStatus?: "running" | "queued" | "waiting" | "done" | "failed" | "idle";
+  lastRunOutcome?: "completed" | "cancelled" | "failed" | "interrupted" | null;
   stage?: string | null;
   /** Actual measured progress in [0, 1]; null means unknown. */
   progress?: number | null;

@@ -181,6 +181,11 @@ function buildSessionRecord(
     archivedAt: session.archivedAt,
     preview,
     status: session.status,
+    lastRunOutcome:
+      session.status === "idle" &&
+      ["running", "waiting", "queued"].includes(session.runtimeStatus ?? "")
+        ? "interrupted"
+        : session.lastRunOutcome,
     runningSince: runningSinceBySession.get(key),
     hasUnseenUpdate: hasUnseenSessionUpdate(
       session.status,

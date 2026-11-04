@@ -102,6 +102,12 @@ export function isSessionEntry(value: unknown): value is SessionCatalogEntry {
       value.runtimeStatus === "done" ||
       value.runtimeStatus === "failed" ||
       value.runtimeStatus === "idle") &&
+    (value.lastRunOutcome === undefined ||
+      value.lastRunOutcome === null ||
+      value.lastRunOutcome === "completed" ||
+      value.lastRunOutcome === "cancelled" ||
+      value.lastRunOutcome === "failed" ||
+      value.lastRunOutcome === "interrupted") &&
     (value.progress === undefined ||
       value.progress === null ||
       (typeof value.progress === "number" &&

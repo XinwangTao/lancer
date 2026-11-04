@@ -1,3 +1,4 @@
+import { runOutcomePatch } from "../../contracts/session-run-state";
 import { assertTaskTokenBudget } from "../orchestration/task-limits";
 import {
   collectBranchReturnBatches,
@@ -3463,6 +3464,9 @@ export class DesktopAppStore {
         pendingAssistantMessageBySession: this.sessionState.pendingAssistantMessageBySession,
         activeWorkingActivityBySession: this.sessionState.activeWorkingActivityBySession,
       });
+      const outcomePatch = runOutcomePatch(event, this.sessionFromState(event.sessionRef)?.status);
+      if (outcomePatch)
+        await this.catalogStore.sessions.updateControlMetadata(event.sessionRef, outcomePatch);
       this.state = applySessionEventState(
         this.state,
         event,

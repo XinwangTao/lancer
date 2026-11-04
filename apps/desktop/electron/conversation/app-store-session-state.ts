@@ -7,6 +7,7 @@ import type {
 } from "../../contracts/desktop-state";
 import { hasUnseenSessionUpdate, previewFromTranscript } from "../application/app-store-utils";
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "./thread-title-constants";
+import { runOutcomePatch } from "../../contracts/session-run-state";
 
 export function applySessionEventState(
   state: DesktopAppState,
@@ -34,6 +35,7 @@ export function applySessionEventState(
                 ? updateSessionRecord(session, {
                     snapshot: snapshotForEvent(event),
                     status: statusForEvent(session.status, event),
+                    lastRunOutcome: runOutcomePatch(event, session.status)?.lastRunOutcome,
                     transcript,
                     preview,
                     runningSince: runningSinceBySession.get(key),
@@ -55,6 +57,7 @@ export function updateSessionRecord(
       Pick<SessionSnapshot, "title" | "updatedAt" | "archivedAt" | "preview" | "status" | "config">
     >;
     readonly status?: SessionRecord["status"];
+    readonly lastRunOutcome?: SessionRecord["lastRunOutcome"];
     readonly transcript: readonly TranscriptMessage[];
     readonly preview: string | undefined;
     readonly runningSince: string | undefined;
@@ -77,6 +80,8 @@ export function updateSessionRecord(
     archivedAt: options.snapshot?.archivedAt ?? session.archivedAt,
     preview: options.preview ?? options.snapshot?.preview ?? session.preview,
     status: nextStatus,
+    lastRunOutcome:
+      options.lastRunOutcome === undefined ? session.lastRunOutcome : options.lastRunOutcome,
     runningSince: options.runningSince,
     hasUnseenUpdate: hasUnseenSessionUpdate(
       nextStatus,

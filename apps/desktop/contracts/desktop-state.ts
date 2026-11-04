@@ -108,6 +108,7 @@ export interface SessionRecord {
   readonly archivedAt?: string;
   readonly preview: string;
   readonly status: SessionStatus;
+  readonly lastRunOutcome?: import("@lancer/session-driver").SessionRuntimeMetadata["lastRunOutcome"];
   readonly runningSince?: string;
   readonly hasUnseenUpdate: boolean;
   readonly config?: SessionConfig;

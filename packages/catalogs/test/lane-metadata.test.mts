@@ -130,6 +130,29 @@ await test("flat runtime statuses and nullable timestamps persist across restart
   });
 });
 
+await test("run outcomes survive reopening and driver catalog refresh without becoming success", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-run-outcome-"));
+  const catalogFilePath = join(dir, "catalog.json");
+  const store = new JsonCatalogStore({ catalogFilePath });
+  await store.sessions.upsertSession(session);
+  for (const lastRunOutcome of ["completed", "cancelled", "failed", "interrupted", null] as const) {
+    await store.sessions.updateControlMetadata(session.sessionRef, { lastRunOutcome });
+    await store.sessions.upsertSession({ ...session, title: "Refreshed" });
+    // Startup rescans the full workspace, rather than only upserting one session.
+    await store.replaceWorkspaceSessions(
+      session.workspaceId,
+      [{ ...session, title: "Rescanned" }],
+      {},
+    );
+    const reopened = new JsonCatalogStore({ catalogFilePath });
+    assert.equal(
+      (await reopened.sessions.getControlMetadata(session.sessionRef))?.lastRunOutcome,
+      lastRunOutcome,
+    );
+    assert.equal((await reopened.sessions.getSession(session.sessionRef))?.title, "Rescanned");
+  }
+});
+
 await test("undefined metadata is ignored while null explicitly clears run timestamps", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-metadata-undefined-"));
   const catalogFilePath = join(dir, "catalog.json");
@@ -185,6 +208,7 @@ await test("progress includes both endpoints", () => {
 
 await test("invalid lane fields fail decoding and leave saved bytes unchanged", async () => {
   const invalid = [
+    { lastRunOutcome: "invented" },
     { laneGroup: null },
     { orchestratorId: 7 },
     { role: "worker" },

@@ -34,6 +34,7 @@ const runtimeMetadataKeys = [
   "startedAt",
   "finishedAt",
   "runtimeStatus",
+  "lastRunOutcome",
   "stage",
   "progress",
   "resultPath",
@@ -253,7 +254,14 @@ export class JsonCatalogStore implements SessionFileCatalogStorage {
     sessionFiles: Readonly<Record<string, string>>,
   ): Promise<void> {
     await this.mutateState((state) => {
-      const nextEntries = entries.map(cloneSessionEntry);
+      const previousByKey = new Map(
+        state.sessions.map((entry) => [sessionKey(entry.sessionRef), entry]),
+      );
+      const nextEntries = entries.map((entry) => ({
+        ...cloneSessionEntry(entry),
+        ...runtimeMetadata(previousByKey.get(sessionKey(entry.sessionRef)) ?? {}),
+        ...runtimeMetadata(entry),
+      }));
       const nextKeys = new Set(nextEntries.map((entry) => sessionKey(entry.sessionRef)));
 
       state.sessions = [
