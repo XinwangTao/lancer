@@ -38,10 +38,15 @@ test("workbuddy resolves from the declared program files root", () => {
   expect(resolveLocalAppExecutable("workbuddy", {}, fakeFileSystem([]))).toBeUndefined();
 });
 
-test("marvis picks the newest installed version directory numerically", () => {
+test("marvis prefers the official launcher and falls back to the newest version", () => {
   const base = path.join("C:\\Program Files", "Tencent", "Marvis", "Application");
+  const launcher = path.join(base, "MarvisLauncher.exe");
   const older = path.join(base, "1.9.0", "Marvis.exe");
   const newer = path.join(base, "1.10.0", "Marvis.exe");
+  expect(resolveLocalAppExecutable("marvis", env, fakeFileSystem([older, newer, launcher]))).toBe(
+    launcher,
+  );
+  // An install without the launcher still resolves the newest version numerically.
   expect(resolveLocalAppExecutable("marvis", env, fakeFileSystem([older, newer]))).toBe(newer);
 });
 
@@ -53,18 +58,20 @@ test("opencode resolves the npm shim that carries the CLI", () => {
   expect(resolveLocalAppExecutable("opencode", {}, files)).toBeUndefined();
 });
 
-test("only allowlisted ids can start an app", () => {
+test("only allowlisted ids can start an app", async () => {
   expect(LOCAL_APP_IDS).toEqual(["workbuddy", "marvis", "opencode"]);
   expect(isLocalAppId("marvis")).toBe(true);
   expect(isLocalAppId("not-an-app")).toBe(false);
   // A renderer cannot smuggle a path through the id argument.
-  expect(() => startLocalApp("C:\\Windows\\System32\\calc.exe", env, fakeFileSystem([]))).toThrow(
-    /Unknown local app/u,
-  );
+  await expect(
+    startLocalApp("C:\\Windows\\System32\\calc.exe", env, fakeFileSystem([])),
+  ).rejects.toThrow(/Unknown local app/u);
 });
 
-test("a missing install is reported instead of spawning anything", () => {
-  expect(() => startLocalApp("workbuddy", {}, fakeFileSystem([]))).toThrow(/not installed/u);
+test("a missing install is reported instead of spawning anything", async () => {
+  await expect(startLocalApp("workbuddy", {}, fakeFileSystem([]))).rejects.toThrow(
+    /not installed/u,
+  );
 });
 
 test("command scripts start through the shell with a quoted path", async () => {
@@ -76,7 +83,7 @@ test("command scripts start through the shell with a quoted path", async () => {
     await mkdir(npmDir, { recursive: true });
     const marker = join(root, "marker.txt");
     await writeFile(join(npmDir, "opencode.cmd"), `@echo off\r\necho ran>"${marker}"\r\n`);
-    startLocalApp("opencode", {
+    await startLocalApp("opencode", {
       ...process.env,
       APPDATA: root,
       LOCALAPPDATA: join(root, "absent"),

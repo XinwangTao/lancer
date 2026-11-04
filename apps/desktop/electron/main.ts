@@ -1240,7 +1240,7 @@ app
           }
           await shell.openExternal(parsed.toString());
         },
-        launchLocalApp: async (appId) => startLocalApp(appId),
+        launchLocalApp: (appId) => startLocalApp(appId),
         pickWorkspace: (window) => pickWorkspaceViaDialog(window),
         createLoginCallbacks: (window) => createRuntimeLoginCallbacks(window),
         probeCustomProviderModels,

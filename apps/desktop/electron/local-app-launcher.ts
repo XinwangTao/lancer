@@ -57,7 +57,10 @@ const resolvers: Readonly<
   marvis: (env, fs) => {
     for (const root of installRoots(env)) {
       const base = path.join(root, "Tencent", "Marvis", "Application");
-      // Marvis installs into a version directory, so pick the newest one present.
+      // The Start menu shortcut targets MarvisLauncher, which also handles updates.
+      const launcher = path.join(base, "MarvisLauncher.exe");
+      if (fs.exists(launcher)) return launcher;
+      // Older layouts install straight into a version directory.
       const installed = fs
         .readDir(base)
         .filter((version) => fs.exists(path.join(base, version, "Marvis.exe")))
@@ -87,11 +90,11 @@ export function resolveLocalAppExecutable(
 }
 
 /** Starts the app detached so it outlives Lancer. Command scripts get a console. */
-export function startLocalApp(
+export async function startLocalApp(
   appId: string,
   env: NodeJS.ProcessEnv = process.env,
   fs: LocalAppFileSystem = nodeFileSystem,
-): void {
+): Promise<void> {
   if (!isLocalAppId(appId)) throw new Error(`Unknown local app: ${appId}`);
   const executable = resolveLocalAppExecutable(appId, env, fs);
   if (!executable) throw new Error(`Local app is not installed: ${appId}`);
@@ -104,8 +107,13 @@ export function startLocalApp(
         stdio: "ignore",
       })
     : spawn(executable, [], { detached: true, stdio: "ignore" });
-  child.once("error", (error) => {
-    console.error(`Failed to start local app: ${appId}`, error);
+  // A spawn failure (deleted binary, permissions) must reach the popover instead of only
+  // the main-process log, so the caller can show it.
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", () => resolve());
+    child.once("error", (error) =>
+      reject(new Error(`Failed to start local app: ${appId} (${error.message})`)),
+    );
   });
   child.unref();
 }
