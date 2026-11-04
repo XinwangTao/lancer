@@ -6,6 +6,7 @@ import {
   TaskAdmission,
   taskAncestry,
   taskLimits,
+  type TaskLimits,
 } from "../../electron/orchestration/task-limits";
 
 const ref = (sessionId: string) => ({ workspaceId: "workspace", sessionId });
@@ -76,6 +77,61 @@ test("provider-reported input, output and cache count once for the whole tree", 
 
 test("invalid limits cannot silently disable admission checks", () => {
   expect(taskLimits({}).depth).toBe(4);
-  for (const value of ["0", "-1", "NaN", "1.5", "1000"])
+  for (const value of ["0", "-1", "NaN", "1.5", "lots"])
     expect(() => taskLimits({ LANCER_MAX_CONCURRENT_BRANCHES: value })).toThrow("必须");
 });
+
+test("defaults stay in place and no ceiling rejects a larger number", () => {
+  expect(taskLimits({})).toEqual({ concurrent: 8, depth: 4, children: 32, tokens: 500_000 });
+  expect(
+    taskLimits({
+      LANCER_MAX_CONCURRENT_BRANCHES: "1000",
+      LANCER_MAX_BRANCH_DEPTH: "1000",
+      LANCER_MAX_TREE_BRANCHES: "10000",
+      LANCER_MAX_TREE_TOKENS: "250000000",
+    }),
+  ).toEqual({ concurrent: 1000, depth: 1000, children: 10_000, tokens: 250_000_000 });
+});
+
+test("every limit accepts an explicit opt-out and rejects typos", () => {
+  const names = [
+    "LANCER_MAX_CONCURRENT_BRANCHES",
+    "LANCER_MAX_BRANCH_DEPTH",
+    "LANCER_MAX_TREE_BRANCHES",
+    "LANCER_MAX_TREE_TOKENS",
+  ] as const;
+  for (const name of names) {
+    for (const value of ["unlimited", "OFF", " unlimited "])
+      expect(taskLimits({ [name]: value })[fieldOf(name)]).toBe(Number.POSITIVE_INFINITY);
+    for (const value of ["0", "-1", "NaN", "1.5", "lots"])
+      expect(() => taskLimits({ [name]: value })).toThrow("正整数");
+  }
+});
+
+test("unlimited limits admit every branch instead of failing closed", () => {
+  const usage: SessionUsageSnapshot = {
+    cache: {},
+    subscription: true,
+    totals: { input: 10, output: 10, cacheRead: 10, cacheWrite: 10, cost: 0 },
+  };
+  const deep = [child("a", "root"), child("b", "a"), child("c", "b")];
+  const unlimited = {
+    concurrent: Number.POSITIVE_INFINITY,
+    depth: Number.POSITIVE_INFINITY,
+    children: Number.POSITIVE_INFINITY,
+    tokens: Number.POSITIVE_INFINITY,
+  };
+  const admission = new TaskAdmission();
+  const releases = Array.from({ length: 40 }, () => admission.reserve(deep, ref("c"), unlimited));
+  expect(releases).toHaveLength(40);
+  for (const release of releases) release();
+  expect(() => assertTaskTokenBudget(deep, ref("c"), () => usage, unlimited)).not.toThrow();
+  expect(() => assertTaskTokenBudget(deep, ref("c"), () => usage, limits)).toThrow("100 Token");
+});
+
+function fieldOf(name: string): keyof TaskLimits {
+  if (name === "LANCER_MAX_CONCURRENT_BRANCHES") return "concurrent";
+  if (name === "LANCER_MAX_BRANCH_DEPTH") return "depth";
+  if (name === "LANCER_MAX_TREE_BRANCHES") return "children";
+  return "tokens";
+}

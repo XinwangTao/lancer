@@ -13,20 +13,28 @@ export interface TaskLimits {
   readonly tokens: number;
 }
 export function taskLimits(env: NodeJS.ProcessEnv = process.env): TaskLimits {
-  const limit = (name: string, fallback: number, max: number) => {
-    const value = env[name];
-    if (value === undefined || value === "") return fallback;
-    const n = Number(value);
-    if (!Number.isSafeInteger(n) || n < 1 || n > max)
-      throw new Error(`${name} 必须是 1–${max} 之间的整数。`);
-    return n;
-  };
   return {
-    concurrent: limit("LANCER_MAX_CONCURRENT_BRANCHES", 8, 64),
-    depth: limit("LANCER_MAX_BRANCH_DEPTH", 4, 16),
-    children: limit("LANCER_MAX_TREE_BRANCHES", 32, 256),
-    tokens: limit("LANCER_MAX_TREE_TOKENS", 500_000, 100_000_000),
+    concurrent: limit(env, "LANCER_MAX_CONCURRENT_BRANCHES", 8),
+    depth: limit(env, "LANCER_MAX_BRANCH_DEPTH", 4),
+    children: limit(env, "LANCER_MAX_TREE_BRANCHES", 32),
+    tokens: limit(env, "LANCER_MAX_TREE_TOKENS", 500_000),
   };
+}
+
+/**
+ * Every limit accepts any positive safe integer, or the explicit opt-out `unlimited` / `off`,
+ * which turns that check into `Infinity`. Values such as `0`, `-1` or `NaN` still fail closed
+ * so a typo cannot silently remove an admission guard.
+ */
+function limit(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "unlimited" || normalized === "off") return Number.POSITIVE_INFINITY;
+  const n = Number(normalized);
+  if (!Number.isSafeInteger(n) || n < 1)
+    throw new Error(`${name} 必须是正整数、unlimited 或 off。`);
+  return n;
 }
 const refOf = (child: Child): SessionRef => ({
   workspaceId: child.childWorkspaceId,
@@ -56,6 +64,7 @@ export function assertTaskTokenBudget(
   usage: (ref: SessionRef) => SessionUsageSnapshot | undefined,
   limits = taskLimits(),
 ): void {
+  if (!Number.isFinite(limits.tokens)) return;
   const key = sessionKey(taskAncestry(children, ref).root);
   const refs = new Map<string, SessionRef>([[key, taskAncestry(children, ref).root]]);
   for (const child of children) {

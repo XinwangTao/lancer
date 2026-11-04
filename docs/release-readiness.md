@@ -17,7 +17,7 @@ Target: 2026-11-01. This is a local preparation checklist, not a published relea
 
 Defaults are 8 unfinished child branches across the app, depth 4 below a root conversation, and 32 total child/grandchild records per task tree. Pending creations reserve capacity before asynchronous work begins. Existing sessions are not deleted when a limit is reached. Independent root conversations have independent tree counts.
 
-Set positive integer environment variables to override: `LANCER_MAX_CONCURRENT_BRANCHES` (up to 64), `LANCER_MAX_BRANCH_DEPTH` (up to 16), `LANCER_MAX_TREE_BRANCHES` (up to 256), `LANCER_MAX_TREE_TOKENS` (default 500000, up to 100000000).
+Set environment variables to override: `LANCER_MAX_CONCURRENT_BRANCHES` (default 8), `LANCER_MAX_BRANCH_DEPTH` (default 4), `LANCER_MAX_TREE_BRANCHES` (default 32), `LANCER_MAX_TREE_TOKENS` (default 500000). Each accepts any positive integer, or `unlimited` / `off` to turn that check off for the session. Invalid values such as `0` still fail closed instead of silently removing the guard.
 
 The token check is an **admission limit based on currently loaded provider-reported usage**, including input, output and cache tokens. It blocks new composer submissions and new branch requests once the known total reaches the threshold. It is not a billing cap: in-flight requests, previously queued turns, provider-internal tool loops and unloaded history can exceed it. Do not describe it as a guaranteed maximum cost. Hard runtime budgeting and write-isolated automatic branches remain separate work.
 
