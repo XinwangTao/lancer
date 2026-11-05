@@ -40,7 +40,7 @@ import { WindowOwner } from "./windows/window-owner";
 import { createPiOrbWindow } from "./windows/pi-orb-window";
 import { ControlService } from "./control/control-service";
 import { ControlServer } from "./control/control-server";
-import { TurnCheckpointStore } from "./workbench/checkpoint-store";
+import { createExternalCaptureStore, TurnCheckpointStore } from "./workbench/checkpoint-store";
 import {
   DesktopExtensionViewOwner,
   DESKTOP_EXTENSION_SCHEME,
@@ -992,19 +992,16 @@ app
     })();
     const extraCaptureStores = extraCaptureRoots.map((root, index) => ({
       label: root.label,
-      source: new TurnCheckpointStore(
+      source: createExternalCaptureStore(
         configuredUserDataDir,
+        index,
+        root.path,
         // External roots can be larger than a code checkout: allow a full first capture.
         {
           timeoutMs: 30_000,
           maxFiles: 20_000,
           maxBytes: 768 * 1024 * 1024,
           maxFileBytes: 64 * 1024 * 1024,
-        },
-        {},
-        {
-          subdirectory: `turn-checkpoints-external-${index}`,
-          rootOverride: { path: root.path, checkoutId: `external:${index}` },
         },
       ),
     }));

@@ -152,6 +152,29 @@ export interface CheckpointStoreOptions {
   readonly rootOverride?: { readonly path: string; readonly checkoutId: string };
 }
 
+/**
+ * A store for one extra capture root, such as a knowledge base.
+ *
+ * The owner module keeps the on-disk naming and checkout id: callers pass a root path and an
+ * index, never a store path, so durable checkpoint state stays inside this module.
+ */
+export function createExternalCaptureStore(
+  userDataDir: string,
+  index: number,
+  rootPath: string,
+  limits: Partial<CheckpointCaptureLimits> = {},
+): TurnCheckpointStore {
+  return new TurnCheckpointStore(
+    userDataDir,
+    limits,
+    {},
+    {
+      subdirectory: `turn-checkpoints-external-${index}`,
+      rootOverride: { path: rootPath, checkoutId: `external:${index}` },
+    },
+  );
+}
+
 /** Owns immutable snapshot objects and small interval metadata, never the user's Git state. */
 export class TurnCheckpointStore {
   readonly repositoryPath: string;
