@@ -61,6 +61,16 @@ function isProviderAuthEnvVar(key: string): boolean {
     key.endsWith("_API_KEY") || (NON_API_KEY_PROVIDER_ENV_VARS as readonly string[]).includes(key)
   );
 }
+
+// Orchestration limits are read on every send. A developer shell value is not
+// necessarily valid (for example `unlimited` fails the integer parser), which
+// would make the app reject every prompt before it reaches Pi. Tests that
+// exercise limits pass explicit `envOverrides`.
+const ORCHESTRATION_LIMIT_ENV_PREFIX = "LANCER_MAX_";
+
+function isAmbientTestEnvVar(key: string): boolean {
+  return isProviderAuthEnvVar(key) || key.startsWith(ORCHESTRATION_LIMIT_ENV_PREFIX);
+}
 export type PiAppWindow = Window & { piApp?: PiDesktopApi };
 export type DesktopTestMode = "foreground" | "background";
 
@@ -361,9 +371,10 @@ function buildDesktopLaunchEnv(
 ): Record<string, string> {
   const baseEnv = options.inheritParentEnv === false ? {} : { ...process.env };
   // Ambient provider credentials must never turn a fixture test into a real request.
+  // Ambient orchestration limits must never make admission reject fixture prompts.
   // Explicit envOverrides remain available for tests of environment configuration.
   for (const key of Object.keys(baseEnv)) {
-    if (isProviderAuthEnvVar(key)) delete baseEnv[key];
+    if (isAmbientTestEnvVar(key)) delete baseEnv[key];
   }
   const env: NodeJS.ProcessEnv = {
     ...baseEnv,
