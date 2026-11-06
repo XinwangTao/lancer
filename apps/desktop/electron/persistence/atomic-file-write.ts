@@ -3,6 +3,7 @@ import { copyFile, mkdir, open, readFile, rename, unlink } from "node:fs/promise
 import { dirname } from "node:path";
 
 const writeQueueByPath = new Map<string, Promise<void>>();
+const RENAME_REPLACE_ATTEMPTS = 10;
 
 /**
  * Write a file durably via temp-file + rename, serializing concurrent writes to
@@ -163,17 +164,22 @@ async function promoteToTarget(
 }
 
 async function renameReplace(src: string, dest: string): Promise<void> {
-  try {
-    await rename(src, dest);
-    return;
-  } catch (error) {
-    if (!isReplaceRenameError(error)) {
-      throw error;
+  // Windows refuses to replace a destination that another process holds open. Retry briefly:
+  // readers open and close in quick succession, so the replace usually stays atomic. Deleting
+  // the destination is the last resort because it exposes a window where the path is missing.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(src, dest);
+      return;
+    } catch (error) {
+      if (!isReplaceRenameError(error)) {
+        throw error;
+      }
+      if (attempt >= RENAME_REPLACE_ATTEMPTS) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
     }
   }
 
-  // Windows rename cannot atomically replace an existing file; remove the
-  // destination first, then rename into the now-free path.
   await cleanupTempFile(dest);
   await rename(src, dest);
 }
