@@ -47,7 +47,7 @@ Linux 还需要 Python 3、make 和 C++ 编译器，用于原生终端依赖；D
 
 会话和账号使用 pi 的 `~/.pi/agent`；Lancer 界面状态在 macOS 的 `~/Library/Application Support/Lancer`。请勿把这些目录、认证文件或真实会话录屏提交到公开仓库。
 
-可选配置及加载方法见 [`.env.example`](.env.example) 和下方英文开发指南。桌面启动不会自动读取 `.env`，实际账号请在应用设置中连接。
+可选配置及加载方法见 [`.env.example`](.env.example) 和下方英文开发指南。桌面启动不会自动读取 `.env`，实际账号请在应用设置中连接。工作区之外的目录（例如知识库）可通过[额外捕获根](docs/external-capture-roots.md)进入同一回合的变更记录。
 
 ### 视频工具
 
@@ -123,7 +123,7 @@ This avoids a global pnpm installation and `corepack enable` permissions. Downlo
 
 ### Configuration and privacy
 
-See [`.env.example`](.env.example) for optional language, media tool and public website settings. Desktop scripts do **not** automatically load `.env` files. On macOS/Linux, copy the template to `.env.local`, review it, and load it in the same terminal:
+See [`.env.example`](.env.example) for optional language, media tool and public website settings. Folders outside a workspace, such as a knowledge base, join the same turn changes through [extra capture roots](docs/external-capture-roots.md). Desktop scripts do **not** automatically load `.env` files. On macOS/Linux, copy the template to `.env.local`, review it, and load it in the same terminal:
 
 ```sh
 cp .env.example .env.local
