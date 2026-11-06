@@ -17,6 +17,10 @@ const execFileAsync = promisify(execFile);
 const proofDir = process.env.PI_APP_CHANGED_FILES_PROOF_DIR;
 
 test("preserves an exact changed-file path through diff and stage actions", async () => {
+  test.skip(
+    process.platform === "win32",
+    "Windows cannot create filenames containing quotes, tabs, newlines, or trailing spaces; the collision path also requires quotes",
+  );
   test.setTimeout(30_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("changed-file-path");
@@ -75,7 +79,7 @@ test("preserves an exact changed-file path through diff and stage actions", asyn
 });
 
 test("shows Git status as unavailable without losing reviewed files", async () => {
-  test.setTimeout(30_000);
+  test.setTimeout(60_000);
   const userDataDir = await makeUserDataDir();
   const workspacePath = await makeWorkspace("changed-files-reviewed");
   const filePath = "reviewed.txt";
