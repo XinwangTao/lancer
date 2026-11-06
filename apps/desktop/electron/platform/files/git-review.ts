@@ -12,7 +12,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { devNull, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
   ChangeReviewFileStageResult,
@@ -36,6 +36,10 @@ const PREPARATION_MS = 10_000;
 /** Pathspec bytes per Git call, well below Windows' 32K command-line limit. */
 const MAX_PATHSPEC_BYTES = 24_000;
 const COMPLETE: ReviewCoverage = { state: "complete", notes: [] };
+// Git for Windows resolves `/dev/null` itself, while `os.devNull` (`\\.\nul`) is not a path it
+// accepts for `--no-index`. Use the Git-visible spelling so added and deleted files keep their
+// "new file mode"/"deleted file mode" patch on every platform.
+const GIT_NULL_PATH = "/dev/null";
 
 export interface GitReviewLimits {
   /** Output cap for one Git listing; larger output makes the review unavailable. */
@@ -963,7 +967,7 @@ async function readPatch(
   const scratch = await mkdtemp(join(tmpdir(), "pi-gui-review-"));
   try {
     const materialize = async (side: string, name: string, file: WorkingFile) => {
-      if (file.mode === "missing") return devNull;
+      if (file.mode === "missing") return GIT_NULL_PATH;
       const relative = `${side}/${name}`;
       const target = safePath(scratch, relative);
       await mkdir(dirname(target), { recursive: true });

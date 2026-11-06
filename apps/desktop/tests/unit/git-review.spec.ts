@@ -22,6 +22,7 @@ import {
   readGitReviewFile,
   type GitReviewSnapshot,
 } from "../../electron/platform/files/git-review";
+import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
 
 const execute = promisify(execFile);
 async function git(cwd: string, ...args: string[]): Promise<string> {
@@ -34,6 +35,8 @@ async function repository(unborn = false): Promise<string> {
   await git(cwd, "init", "-b", "trunk");
   await git(cwd, "config", "user.email", "review@example.invalid");
   await git(cwd, "config", "user.name", "Review fixture");
+  // Review fixtures use raw LF bytes; a developer's global core.autocrlf must not change patches.
+  await git(cwd, "config", "core.autocrlf", "false");
   if (!unborn) {
     await writeFile(join(cwd, "file.txt"), "base\n");
     await git(cwd, "add", "--", "file.txt");
@@ -155,7 +158,7 @@ test("a new file at a staged rename's old path stays current, readable and stage
   expect((await changeGitReviewFileStage(review, recreated!.id, "stage")).state).toBe("applied");
 });
 
-test("detects same-status byte and executable-mode changes before reading or staging", async () => {
+test("detects same-status byte changes before reading or staging", async () => {
   const cwd = await repository();
   await writeFile(join(cwd, "file.txt"), "first edit\n");
   const first = await uncommitted(cwd);
@@ -166,14 +169,27 @@ test("detects same-status byte and executable-mode changes before reading or sta
   expect(await readGitReviewFile(first, file.id)).toMatchObject({ state: "stale" });
   expect(await changeGitReviewFileStage(first, file.id, "stage")).toMatchObject({ state: "stale" });
   expect(await git(cwd, "diff", "--cached")).toBe("");
-  const second = await uncommitted(cwd);
+});
+
+test("detects executable-mode changes before reading", async () => {
+  test.skip(
+    process.platform === "win32",
+    "Windows filesystems do not record POSIX executable-mode changes.",
+  );
+  const cwd = await repository();
+  await writeFile(join(cwd, "file.txt"), "first edit\n");
+  const review = await uncommitted(cwd);
   await chmod(join(cwd, "file.txt"), 0o755);
-  expect(await checkGitReviewFileCurrent(second, second.files[0]!.id)).toMatchObject({
+  expect(await checkGitReviewFileCurrent(review, review.files[0]!.id)).toMatchObject({
     state: "stale",
   });
 });
 
-test("stages and unstages exact pathological paths, rename pairs, and unborn additions", async () => {
+test("stages and unstages exact pathological paths", async () => {
+  test.skip(
+    process.platform === "win32",
+    "Windows filesystems reject the control characters and Git glob syntax in this path.",
+  );
   const cwd = await repository();
   const odd = ' :(glob)* spaced\t"quoted"\nname.txt';
   await writeFile(join(cwd, odd), "odd content\n");
@@ -186,9 +202,13 @@ test("stages and unstages exact pathological paths, rename pairs, and unborn add
   file = review.files.find((entry) => entry.path === odd)!;
   expect(await changeGitReviewFileStage(review, file.id, "unstage")).toEqual({ state: "applied" });
   expect(await readFile(join(cwd, odd), "utf8")).toBe("odd content\n");
+});
+
+test("stages and unstages rename pairs and unborn additions", async () => {
+  const cwd = await repository();
   await rename(join(cwd, "file.txt"), join(cwd, "renamed.txt"));
   await git(cwd, "add", "-A", "--", "file.txt", "renamed.txt");
-  review = await uncommitted(cwd);
+  let review = await uncommitted(cwd);
   const renamed = review.files.find((entry) => entry.path === "renamed.txt")!;
   expect(renamed).toMatchObject({ status: "renamed", previousPath: "file.txt" });
   expect(await changeGitReviewFileStage(review, renamed.id, "unstage")).toEqual({
@@ -321,16 +341,22 @@ test("makes binary, deleted, empty, conflict, and submodule coverage explicit", 
   expect(stagedConflict.result.summary).toMatch(/Unmerged index stages/);
 });
 
-test("renders symlink text without following its target and reports oversized content", async () => {
+test("renders symlink text without following its target", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
   const cwd = await repository();
   const secret = join(await mkdtemp(join(tmpdir(), "pi-review-outside-")), "secret.txt");
   await writeFile(secret, "outside-content-must-not-be-read");
   await symlink(secret, join(cwd, "link"));
-  await writeFile(join(cwd, "large.txt"), Buffer.alloc(8 * 1024 * 1024 + 1, 65));
   const review = await uncommitted(cwd);
   const link = (await fileContent(review, "link")).result;
   expect(link.patch).toContain(secret);
   expect(link.patch).not.toContain("outside-content-must-not-be-read");
+});
+
+test("reports content over the review limit instead of reading it", async () => {
+  const cwd = await repository();
+  await writeFile(join(cwd, "large.txt"), Buffer.alloc(8 * 1024 * 1024 + 1, 65));
+  const review = await uncommitted(cwd);
   const large = (await fileContent(review, "large.txt")).result;
   expect(large.coverage.state).toBe("partial");
   expect(large.coverage.notes.join(" ")).toContain("8 MiB");
