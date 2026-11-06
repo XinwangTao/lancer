@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import {
   chmod,
   link,
@@ -554,7 +555,10 @@ test("reports default and extended capture budgets on a 2,000-file checkout", as
     ),
   );
   const defaultCapture = await new TurnCheckpointStore(userData).capture(workspace);
-  const extendedCapture = await new TurnCheckpointStore(userData, { timeoutMs: 10_000 }).capture(
+  // The default budget is meant to lapse on a checkout this size. The longer budget only has to
+  // finish, so it follows the background warm-up budget instead of a machine-speed bet: hashing
+  // 2,000 freshly written files on a cold Windows disk takes several times a fixed 10s.
+  const extendedCapture = await new TurnCheckpointStore(userData, { timeoutMs: 60_000 }).capture(
     workspace,
   );
   available(extendedCapture);
@@ -576,6 +580,75 @@ test("reports default and extended capture budgets on a 2,000-file checkout", as
       },
     })}`,
   );
+});
+
+test("a capture still reports its outcome when the filesystem refuses to release its scratch", async () => {
+  test.skip(
+    process.platform !== "win32",
+    "Only Windows refuses to remove a folder another process is using.",
+  );
+  const { workspace, userData, store } = await fixture();
+  await Promise.all(
+    Array.from({ length: 200 }, (_, index) =>
+      writeFile(join(workspace, `held-${index}.txt`), `held ${index}\n`.repeat(10)),
+    ),
+  );
+  const checkpointDirectory = join(userData, "turn-checkpoints");
+  const capture = store.capture(workspace);
+  // Hold the capture's spool folder as a working directory, so its removal is refused the way it
+  // is when an aborted Git child still has the files it was reading open.
+  let holder: ChildProcess | undefined;
+  for (const deadline = Date.now() + 10_000; !holder && Date.now() < deadline;) {
+    const spool = (await readdir(checkpointDirectory).catch(() => [] as string[])).find((name) =>
+      name.startsWith("capture-"),
+    );
+    if (!spool) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 20_000)"], {
+      cwd: join(checkpointDirectory, spool),
+      stdio: "ignore",
+    });
+    await once(child, "spawn");
+    holder = child;
+  }
+  try {
+    available(await capture);
+  } finally {
+    holder?.kill();
+  }
+  // Nothing here is user data; the unremovable scratch is left for maintenance to sweep.
+  expect((await store.capture(workspace)).state).toBe("available");
+});
+
+test("maintenance sweeps aged capture scratch and keeps the scratch of a running capture", async () => {
+  const { workspace, userData } = await fixture();
+  const checkpointDirectory = join(userData, "turn-checkpoints");
+  const indexes = join(checkpointDirectory, "indexes");
+  await mkdir(join(checkpointDirectory, "capture-abandoned"), { recursive: true });
+  await writeFile(join(checkpointDirectory, "capture-abandoned", "blob-0"), "left behind");
+  await mkdir(indexes, { recursive: true });
+  await writeFile(join(indexes, "abandoned.index"), "");
+  await mkdir(join(checkpointDirectory, "capture-in-flight"));
+  await writeFile(join(checkpointDirectory, "capture-in-flight", "blob-0"), "being captured");
+  await writeFile(join(indexes, "in-flight.index"), "");
+  const aged = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  for (const path of [
+    join(checkpointDirectory, "capture-abandoned"),
+    join(indexes, "abandoned.index"),
+  ])
+    await utimes(path, aged, aged);
+  const store = new TurnCheckpointStore(userData, { timeoutMs: 10_000 });
+  await store.maintain();
+  expect((await readdir(checkpointDirectory)).sort()).toEqual([
+    "capture-in-flight",
+    "indexes",
+    "objects.git",
+  ]);
+  expect(await readdir(indexes)).toEqual(["in-flight.index"]);
+  // The surviving entries are untouched, so a boundary can still capture after the sweep.
+  available(await store.capture(workspace));
 });
 
 async function snapshotRefs(store: TurnCheckpointStore): Promise<string[]> {

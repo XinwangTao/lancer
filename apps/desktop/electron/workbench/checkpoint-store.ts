@@ -7,10 +7,10 @@ import {
   mkdtemp,
   open,
   readlink,
+  readdir,
   realpath,
   rename,
   rm,
-  unlink,
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -635,8 +635,8 @@ export class TurnCheckpointStore {
           "Git returned an invalid snapshot object inventory.",
         );
       }
-      await rm(captureDirectory, { recursive: true, force: true });
-      spoolPath = undefined;
+      // The tree is stored; a refused scratch removal leaves nothing to fail this capture over.
+      if (await removeScratchBestEffort(captureDirectory)) spoolPath = undefined;
       signal.throwIfAborted();
       const files = new Map<string, CachedFile>();
       for (const entry of stored) files.set(entry.path, entry.file);
@@ -724,17 +724,9 @@ export class TurnCheckpointStore {
               );
       return { ...result, fileCount, byteCount, durationMs: Date.now() - started };
     } finally {
-      if (spoolPath) await rm(spoolPath, { recursive: true, force: true });
+      if (spoolPath) await removeScratchBestEffort(spoolPath);
       // These are this capture's newly created scratch indexes, not user or checkpoint data.
-      await Promise.all(
-        [indexPath, `${indexPath}.lock`].map(async (path) => {
-          try {
-            await unlink(path);
-          } catch (error) {
-            if (!isMissing(error)) throw error;
-          }
-        }),
-      );
+      for (const path of [indexPath, `${indexPath}.lock`]) await removeScratchBestEffort(path);
     }
   }
 
@@ -883,6 +875,29 @@ export class TurnCheckpointStore {
     timer.unref?.();
   }
 
+  /**
+   * A capture that died with the app, or one whose scratch the filesystem refused to release,
+   * leaves no record behind. Only aged scratch is swept, so a capture started just now keeps it.
+   */
+  private async sweepScratch(): Promise<void> {
+    const cutoff = Date.now() - this.retention.pruneGraceMs;
+    const aged = async (path: string): Promise<boolean> => {
+      const stat = await lstat(path).catch(() => undefined);
+      return stat !== undefined && stat.mtimeMs <= cutoff;
+    };
+    const entries = await readdir(this.directory).catch(() => [] as string[]);
+    for (const name of entries) {
+      if (!name.startsWith("capture-")) continue;
+      const path = join(this.directory, name);
+      if (await aged(path)) await removeScratchBestEffort(path);
+    }
+    const indexes = join(this.directory, "indexes");
+    for (const name of await readdir(indexes).catch(() => [] as string[])) {
+      const path = join(indexes, name);
+      if (await aged(path)) await removeScratchBestEffort(path);
+    }
+  }
+
   private async runMaintenance(): Promise<void> {
     await this.load();
     this.lastMaintenanceAt = Date.now();
@@ -893,6 +908,7 @@ export class TurnCheckpointStore {
     this.inventoryGeneration += 1;
     this.inventories.clear();
     await Promise.allSettled([...this.activeCaptures, ...this.checkoutQueues.values()]);
+    await this.sweepScratch();
     const signal = AbortSignal.timeout(30 * 60_000);
     await this.prepareGit(signal);
     const live = new Set<string>();
@@ -1159,6 +1175,28 @@ function nulRecords(buffer: Buffer): string[] {
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+/**
+ * A capture's scratch folder and index hold only this run's data. Windows keeps a killed Git
+ * child's handles for a moment after an aborted capture, so removal retries before giving up.
+ */
+async function removeScratch(path: string): Promise<void> {
+  await rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}
+
+/**
+ * Cleanup runs after the capture result is decided, so a filesystem that refuses the removal
+ * must never replace a recorded outcome with a hard failure. Maintenance sweeps what remains.
+ */
+async function removeScratchBestEffort(path: string): Promise<boolean> {
+  try {
+    await removeScratch(path);
+    return true;
+  } catch (error) {
+    console.warn("[turn-checkpoints] capture scratch removal failed", path, error);
+    return false;
+  }
 }
 
 async function checkoutRoot(path: string): Promise<string> {
