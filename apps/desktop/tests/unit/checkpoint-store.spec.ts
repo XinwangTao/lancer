@@ -22,7 +22,13 @@ import {
   TurnCheckpointStore,
   type CheckpointCapture,
 } from "../../electron/workbench/checkpoint-store";
-import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
+import {
+  canCreateDirectoryLinks,
+  canCreateSymlinks,
+  createDirectoryLink,
+  DIRECTORY_LINK_SKIP_REASON,
+  SYMLINK_SKIP_REASON,
+} from "../helpers/platform";
 
 async function git(cwd: string, args: string[], input?: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -490,13 +496,13 @@ test("sparse and conflicted checkouts remain explicitly unavailable", async () =
 });
 
 test("a directory replaced by a symlink remains explicitly unavailable", async () => {
-  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  test.skip(!(await canCreateDirectoryLinks()), DIRECTORY_LINK_SKIP_REASON);
   const { directory, workspace, store } = await fixture();
   await mkdir(join(workspace, "nested"));
   await writeFile(join(workspace, "nested", "file.txt"), "base");
   await git(workspace, ["add", "."]);
   await rename(join(workspace, "nested"), join(directory, "outside"));
-  await symlink(join(directory, "outside"), join(workspace, "nested"));
+  await createDirectoryLink(join(directory, "outside"), join(workspace, "nested"));
   expect(await store.capture(workspace)).toMatchObject({
     state: "unavailable",
     code: "unsafe-symlink",
@@ -773,14 +779,14 @@ test("incremental captures reread only changed files and still see same-size rew
 });
 
 test("a tracked directory replaced by a symlink is refused even when its file is unchanged", async () => {
-  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  test.skip(!(await canCreateDirectoryLinks()), DIRECTORY_LINK_SKIP_REASON);
   const { directory, workspace, store } = await fixture();
   await mkdir(join(workspace, "nested"));
   await writeFile(join(workspace, "nested", "deep.txt"), "deep");
   await git(workspace, ["add", "."]);
   available(await store.capture(workspace));
   await rename(join(workspace, "nested"), join(directory, "moved-nested"));
-  await symlink(join(directory, "moved-nested"), join(workspace, "nested"));
+  await createDirectoryLink(join(directory, "moved-nested"), join(workspace, "nested"));
   expect(await store.capture(workspace)).toMatchObject({
     state: "unavailable",
     code: "unsafe-symlink",

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -7,7 +7,11 @@ import {
   recordMediaOperations,
   runMediaOperation,
 } from "../../electron/video-learn/media-operations";
-import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
+import {
+  canCreateDirectoryLinks,
+  createDirectoryLink,
+  DIRECTORY_LINK_SKIP_REASON,
+} from "../helpers/platform";
 
 test("media operations retain the executed command, output, duration and a genuine failure", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "media-operations-"));
@@ -42,7 +46,7 @@ test("media trace ignores an oversized operations file", () => {
 });
 
 test("media trace ignores an outside-project symlinked run", async () => {
-  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  test.skip(!(await canCreateDirectoryLinks()), DIRECTORY_LINK_SKIP_REASON);
   const root = mkdtempSync(path.join(tmpdir(), "media-trace-bounds-"));
   const directory = path.join(root, "learning", "video-test");
   mkdirSync(directory, { recursive: true });
@@ -51,6 +55,6 @@ test("media trace ignores an outside-project symlinked run", async () => {
     path.join(outside, "media-operations.json"),
     JSON.stringify({ videoId: "escaped", operations: [] }),
   );
-  symlinkSync(outside, path.join(root, "learning", "escaped"));
+  await createDirectoryLink(outside, path.join(root, "learning", "escaped"));
   expect(readMediaOperations(root, "escaped")).toEqual([]);
 });

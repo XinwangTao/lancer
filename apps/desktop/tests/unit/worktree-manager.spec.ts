@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -8,7 +8,11 @@ import type { CatalogStorage, WorktreeCatalogEntry } from "@lancer/catalogs";
 import type { WorkspaceRef } from "@lancer/session-driver";
 import { appWorktreeRootMatcher } from "../../electron/platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../../electron/platform/worktrees/worktree-manager";
-import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
+import {
+  canCreateDirectoryLinks,
+  createDirectoryLink,
+  DIRECTORY_LINK_SKIP_REASON,
+} from "../helpers/platform";
 
 const execFileAsync = promisify(execFile);
 
@@ -251,12 +255,12 @@ test("app worktree paths are matched inside the profile root only, even before i
 });
 
 test("a profile root reached through a symlink still matches resolved Git paths", async () => {
-  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  test.skip(!(await canCreateDirectoryLinks()), DIRECTORY_LINK_SKIP_REASON);
   const root = await mkdtemp(join(tmpdir(), "wt-roots-"));
   try {
     // Git reports resolved paths; a root reached through a symlink must still match.
     await mkdir(join(root, "real", "worktrees", "repo", "task-2"), { recursive: true });
-    await symlink(join(root, "real"), join(root, "linked"));
+    await createDirectoryLink(join(root, "real"), join(root, "linked"));
     const throughLink = appWorktreeRootMatcher(join(root, "linked", "worktrees"));
     expect(
       await throughLink(await realpath(join(root, "real", "worktrees", "repo", "task-2"))),
