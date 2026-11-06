@@ -12,7 +12,9 @@ release/
 release-*/
 .cache/
 # Local verification evidence, app backups, and package-manager cache.
-/.artifacts/
+# Lanes that resolve evidence paths from their own working directory write an
+# `.artifacts/` folder inside that package, so ignore it at any depth.
+.artifacts/
 /.pnpm-store/
 playwright-report/
 test-results/
