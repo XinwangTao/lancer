@@ -26,6 +26,16 @@ import {
 
 const VIDEO_ID = /^[A-Za-z0-9_-]+$/;
 const HEX64 = /^[a-f0-9]{64}$/;
+
+/** Evidence records store paths relative to the project root with forward slashes. */
+function portableRelativePath(root: string, file: string): string {
+  return path.relative(root, file).split(path.sep).join("/");
+}
+
+/** Accept manifests written by earlier Windows builds, which recorded `\` separators. */
+function portableEvidencePath(value: string): string {
+  return process.platform === "win32" ? value.replaceAll("\\", "/") : value;
+}
 export interface VideoLearnOptions extends MediaOptions, AnalysisOptions {
   readonly handoffModelId?: string;
   readonly ytDlpPath?: string;
@@ -147,13 +157,14 @@ function gate(
   });
 }
 function sourcePath(root: string, id: string, relative: unknown): string {
+  const evidencePath = typeof relative === "string" ? portableEvidencePath(relative) : undefined;
   if (
-    typeof relative !== "string" ||
-    !relative.startsWith(`raw/videos/${id}/`) ||
-    path.isAbsolute(relative)
+    evidencePath === undefined ||
+    !evidencePath.startsWith(`raw/videos/${id}/`) ||
+    path.isAbsolute(evidencePath)
   )
     throw new VideoPassError("E_NOT_VIDEO");
-  const file = path.resolve(root, relative);
+  const file = path.resolve(root, evidencePath);
   const dir = path.resolve(root, "raw/videos", id);
   if (
     !file.startsWith(`${dir}${path.sep}`) ||
@@ -206,7 +217,7 @@ export async function runDownload(
           .find((p) => existsSync(p) && statSync(p).size > 0) ?? "";
       if (!file) throw new VideoPassError("E_NOT_VIDEO");
     }
-    const relative = path.relative(root, file);
+    const relative = portableRelativePath(root, file);
     const sha = await sha256File(file);
     if (request.expectedSha256 && sha !== request.expectedSha256)
       throw new VideoPassError("E_NOT_VIDEO");
@@ -266,7 +277,7 @@ export async function runWatch(
     )
       throw new VideoPassError("E_NOT_VIDEO");
     const source = sourcePath(root, id, manifest.local_path);
-    sourceRel = String(manifest.local_path);
+    sourceRel = portableEvidencePath(String(manifest.local_path));
     sha = await sha256File(source);
     if (sha !== manifest.sha256 || statSync(source).size !== manifest.byte_size)
       throw new VideoPassError("E_NOT_VIDEO");

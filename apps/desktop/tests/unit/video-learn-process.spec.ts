@@ -245,6 +245,8 @@ test("e: actual video, cut and audio produce verifiable frames and three gates (
   }
   const manifest = json(path.join(root, "raw", "videos", videoId(root), "meta.json"));
   expect(manifest.sha256).toBe(fixtureSha256(source));
+  // Gates and specs only accept forward-slash evidence paths, including on Windows.
+  expect(manifest.local_path).toBe(`raw/videos/${videoId(root)}/source.mp4`);
   const extracted = frames(root);
   expect(extracted.source_sha256).toBe(manifest.sha256);
   expect(extracted.frames.length).toBeGreaterThanOrEqual(2);
