@@ -13,6 +13,11 @@ import {
   waitForWorkspaceByPath,
 } from "../helpers/electron-app";
 
+// Saving or deleting reloads the pi runtime for the workspace. That outlasts
+// the 5s local expect timeout on Windows dev machines, where the default only
+// suits UI convergence rather than a full runtime resource reload.
+const CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS = 20_000;
+
 async function readModelsJson(agentDir: string): Promise<Record<string, unknown>> {
   const raw = await readFile(join(agentDir, "models.json"), "utf8");
   return JSON.parse(raw) as Record<string, unknown>;
@@ -143,7 +148,8 @@ test("custom endpoint detection preserves focus moved to manual model entry", as
 });
 
 test("settings lets the user add, edit, and delete an OpenAI-compatible custom endpoint", async () => {
-  test.setTimeout(60_000);
+  // Three full runtime reloads (add, edit, delete) on Windows dev machines.
+  test.setTimeout(120_000);
   const userDataDir = await makeUserDataDir();
   const agentDir = join(userDataDir, "agent");
   const workspacePath = await makeWorkspace("custom-endpoints-add-workspace");
@@ -177,7 +183,7 @@ test("settings lets the user add, edit, and delete an OpenAI-compatible custom e
     await dialog.getByRole("button", { name: "Add", exact: true }).click();
 
     await dialog.getByRole("button", { name: "Add endpoint", exact: true }).click();
-    await expect(dialog).toHaveCount(0);
+    await expect(dialog).toHaveCount(0, { timeout: CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS });
 
     const entryRow = customEndpoints.locator(".settings-row", {
       has: window.locator(".settings-row__title", { hasText: /^ollama-local$/ }),
@@ -213,7 +219,7 @@ test("settings lets the user add, edit, and delete an OpenAI-compatible custom e
     const baseUrlInput = editDialog.getByLabel("Base URL");
     await baseUrlInput.fill("http://localhost:8000/v1");
     await editDialog.getByRole("button", { name: "Save changes", exact: true }).click();
-    await expect(editDialog).toHaveCount(0);
+    await expect(editDialog).toHaveCount(0, { timeout: CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS });
     await expect(entryRow).toContainText("http://localhost:8000/v1");
 
     const editedModels = await readModelsJson(agentDir);
@@ -224,7 +230,9 @@ test("settings lets the user add, edit, and delete an OpenAI-compatible custom e
 
     // Delete flow.
     await entryRow.getByRole("button", { name: "Remove", exact: true }).click();
-    await expect(customEndpoints).toContainText("No custom endpoints yet.");
+    await expect(customEndpoints).toContainText("No custom endpoints yet.", {
+      timeout: CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS,
+    });
 
     const afterDelete = await readModelsJson(agentDir);
     const afterDeleteProviders = (afterDelete.providers as Record<string, unknown>) ?? {};
@@ -342,7 +350,9 @@ test("custom endpoints keep legacy managed entries separate from built-in overri
       has: window.locator(".settings-row__title", { hasText: /^legacy-local$/ }),
     });
     await legacyRow.getByRole("button", { name: "Remove", exact: true }).click();
-    await expect(customEndpoints).toContainText("No custom endpoints yet.");
+    await expect(customEndpoints).toContainText("No custom endpoints yet.", {
+      timeout: CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS,
+    });
 
     const afterLegacyDelete = await readModelsJson(agentDir);
     const providers = afterLegacyDelete.providers as Record<string, unknown>;
@@ -554,7 +564,7 @@ test("custom endpoint dialog supports a long-list keyboard flow with sticky acti
     await saveCustomEndpointProof(window, proofDir, "03-sticky-actions.png");
 
     await addEndpointButton.click();
-    await expect(dialog).toHaveCount(0);
+    await expect(dialog).toHaveCount(0, { timeout: CUSTOM_ENDPOINT_RELOAD_TIMEOUT_MS });
     const entryRow = customEndpoints.locator(".settings-row", {
       has: window.locator(".settings-row__title", { hasText: /^many-models$/ }),
     });
