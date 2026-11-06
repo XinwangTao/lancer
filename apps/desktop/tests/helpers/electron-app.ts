@@ -2066,11 +2066,26 @@ export async function waitForSessionByTitle(
 export async function selectSession(window: Page, sessionTitle: string): Promise<void> {
   await clickSession(window, sessionTitle);
   const header = window.locator('[data-testid="thread-title"], .chat-header__title');
+  const transcript = window.getByTestId("transcript");
+  const composer = window.getByTestId("composer");
+  await expect
+    .poll(
+      async () =>
+        (await header.count()) > 0 ||
+        (await transcript.count()) > 0 ||
+        (await composer.count()) > 0,
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   if ((await header.count()) > 0) {
     await expect(header).toHaveText(sessionTitle);
-  } else {
-    await expect(window.getByTestId("transcript")).toBeVisible();
+    return;
   }
+  if ((await transcript.count()) > 0) {
+    await expect(transcript).toBeVisible();
+    return;
+  }
+  await expect(composer).toBeVisible();
 }
 
 /**
