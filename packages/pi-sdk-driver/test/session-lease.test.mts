@@ -252,19 +252,26 @@ await test("releaseLeaseFile removes only the caller's own lease", async () => {
 });
 
 async function raceForLease(leasePath: string, processes: number): Promise<string[]> {
-  const startAt = Date.now() + 1_000;
   const leaseModule = new URL("../dist/session-lease.js", import.meta.url).href;
-  // Each child waits for a shared start time, races, prints its result, then
-  // stays alive (so its lease is live) until the parent closes stdin.
+  // Each child announces readiness, waits for the parent's shared "go" line, races,
+  // prints its result, then stays alive (so its lease is live) until stdin closes.
+  // A wall-clock start misfires whenever spawn or module loading stalls under load.
   const script = `
     const { acquireLeaseFile, currentLeaseIdentity, defaultIsPidAlive } = await import(${JSON.stringify(leaseModule)});
-    if (Date.now() > ${startAt}) { process.stdout.write("late\\n"); }
-    while (Date.now() < ${startAt}) {}
+    process.stdout.write("ready\\n");
+    await new Promise((resolve) => {
+      let buffered = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        buffered += chunk;
+        if (buffered.includes("go\\n")) resolve();
+      });
+      process.stdin.resume();
+    });
     const result = await acquireLeaseFile(${JSON.stringify(leasePath)}, {
       now: Date.now(), ttlMs: 60000, self: currentLeaseIdentity(), isPidAlive: defaultIsPidAlive,
     });
     process.stdout.write(result.status + "\\n");
-    process.stdin.resume();
     process.stdin.on("end", () => process.exit(0));
   `;
   const children = Array.from({ length: processes }, () =>
@@ -272,22 +279,47 @@ async function raceForLease(leasePath: string, processes: number): Promise<strin
       stdio: ["pipe", "pipe", "inherit"],
     }),
   );
+  const races = children.map((child) => {
+    child.stdin.on("error", () => undefined);
+    let buffer = "";
+    let markReady: (() => void) | undefined;
+    let markStatus: ((status: string) => void) | undefined;
+    let rejectReady: ((error: Error) => void) | undefined;
+    let rejectStatus: ((error: Error) => void) | undefined;
+    const ready = new Promise<void>((resolve, reject) => {
+      markReady = resolve;
+      rejectReady = reject;
+    });
+    const status = new Promise<string>((resolve, reject) => {
+      markStatus = resolve;
+      rejectStatus = reject;
+    });
+    // A child can fail while the parent is still waiting for readiness; keep both
+    // promises handled so the race reports the first failure instead of crashing.
+    void ready.catch(() => undefined);
+    void status.catch(() => undefined);
+    child.stdout.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
+      let newline = buffer.indexOf("\n");
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
+        if (line === "ready") markReady?.();
+        else if (line) markStatus?.(line);
+        newline = buffer.indexOf("\n");
+      }
+    });
+    child.on("exit", (code) => {
+      const error = new Error(`child exited early (${code})`);
+      rejectReady?.(error);
+      rejectStatus?.(error);
+    });
+    return { child, ready, status };
+  });
   try {
-    return await Promise.all(
-      children.map(
-        (child) =>
-          new Promise<string>((resolve, reject) => {
-            let out = "";
-            child.stdout.on("data", (chunk: Buffer) => {
-              out += chunk.toString();
-              const lines = out.split("\n").filter(Boolean);
-              if (lines.includes("late")) reject(new Error("child started after the race"));
-              if (lines.length > 0) resolve(lines[0]!);
-            });
-            child.on("exit", (code) => reject(new Error(`child exited early (${code})`)));
-          }),
-      ),
-    );
+    await Promise.all(races.map(({ ready }) => ready));
+    for (const { child } of races) child.stdin.write("go\n");
+    return await Promise.all(races.map(({ status }) => status));
   } finally {
     const running = children.filter((child) => child.exitCode === null);
     for (const child of running) {
