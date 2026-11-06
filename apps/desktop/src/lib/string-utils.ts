@@ -29,7 +29,9 @@ export function formatRelativeTime(value: string): string {
   const diffWeeks = Math.floor(diffDays / 7);
   if (diffDays < 30) return t("workbench.relative.weeks", { count: diffWeeks });
   const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths < 12) return t("workbench.relative.months", { count: diffMonths });
+  // A month is approximated as 30 days, so 360-364 days reaches twelve months before the year
+  // boundary at 365. Branch on days rather than the month count or that window renders "0y".
+  if (diffDays < 365) return t("workbench.relative.months", { count: diffMonths });
   const diffYears = Math.floor(diffDays / 365);
   return t("workbench.relative.years", { count: diffYears });
 }
