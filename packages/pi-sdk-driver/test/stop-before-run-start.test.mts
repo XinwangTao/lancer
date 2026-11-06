@@ -8,6 +8,7 @@ import type { AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import type { SessionDriverEvent } from "@lancer/session-driver";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
+import { EVENT_SETTLE_TIMEOUT_MS } from "./timeouts.mts";
 
 type StreamFunction = AgentSessionRuntime["session"]["agent"]["streamFunction"];
 
@@ -184,7 +185,7 @@ await test("Stop pressed while Pi is still starting a run cancels that run", asy
   await runtime.session.waitForIdle();
   assert.deepEqual(assistantReplies().at(-1), ["stop", "FULL ANSWER"]);
   // Driver events are delivered asynchronously; wait for the second run's completion.
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + EVENT_SETTLE_TIMEOUT_MS;
   while (!events.some((event) => event.type === "runCompleted") && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

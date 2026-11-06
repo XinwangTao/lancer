@@ -6,10 +6,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import type { PiDesktopExtensionRuntime } from "../dist/desktop-extension-bridge.js";
+import { RUNTIME_TEST_TIMEOUT_MS } from "./timeouts.mts";
 
 await test(
   "installed Pi discovers one loaded closure per runtime without waiting for stalled desktop work",
-  { timeout: 10_000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const root = await mkdtemp(join(tmpdir(), "pi-desktop-bridge-"));
     const agentDir = join(root, "agent");

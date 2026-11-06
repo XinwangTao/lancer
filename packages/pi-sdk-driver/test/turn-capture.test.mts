@@ -13,6 +13,7 @@ import type {
 import type { SessionDriverEvent } from "@lancer/session-driver";
 import { PiSdkDriver, type PiSdkDriverConfig } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
+import { RUNTIME_TEST_TIMEOUT_MS } from "./timeouts.mts";
 
 type StreamFunction = AgentSessionRuntime["session"]["agent"]["streamFunction"];
 type CaptureHandler = NonNullable<PiSdkDriverConfig["onTurnCaptureBoundary"]>;
@@ -307,7 +308,7 @@ async function assertPersistedCaptureIdentity(h: Awaited<ReturnType<typeof fixtu
 
 await test(
   "opening capture is awaited before the provider or real write tool can change files",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const entered = gate();
     const release = gate();
@@ -359,7 +360,7 @@ await test(
 
 await test(
   "consumed steering and follow-up each split at the actual file boundary",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const firstRequest = gate();
     const releaseFirst = gate();
@@ -408,7 +409,7 @@ await test(
 
 await test(
   "consecutive users before an assistant response coalesce into one interval",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const openingEntered = gate();
     const releaseOpening = gate();
@@ -448,7 +449,7 @@ await test(
 
 await test(
   "retry and before-settle continuation retain the initial baseline and all assistant anchors",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     let requests = 0;
     let continued = false;
@@ -499,7 +500,7 @@ await test(
 
 await test(
   "Stop after a partial file edit closes the interval as stopped",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const waitingForStop = gate();
     let requests = 0;
@@ -531,7 +532,7 @@ await test(
 
 await test(
   "extension abort in before-settle is stopped without an aborted assistant message",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const h = await fixture(t, (model) => response(model), {
       extension: (pi) => {
@@ -555,7 +556,7 @@ await test(
 
 await test(
   "an extension abort while idle does not cancel its next custom-started activity",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const h = await fixture(t, (model) => response(model), {
       extension: (pi) => {
@@ -587,7 +588,7 @@ await test(
 
 await test(
   "closing a session during before-settle captures interruption after a successful assistant turn",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const beforeSettle = gate();
     const releaseSettlement = gate();
@@ -634,7 +635,7 @@ await test(
 
 await test(
   "custom extension starts and settled-triggered user prompts get distinct captured activities",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     let startedFollowUp = false;
     let requests = 0;
@@ -686,7 +687,7 @@ await test(
 
 await test(
   "reloading the same Pi session creates a fresh runtime generation and checkpoint",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const h = await fixture(t, (model) => response(model));
     await h.send("Before reload");
@@ -710,7 +711,7 @@ await test(
 
 await test(
   "capture callback rejection does not block coding or reuse the failed activity",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     let requests = 0;
     const h = await fixture(
@@ -745,7 +746,7 @@ await test(
 
 await test(
   "capture deadline aborts its observer and records the missing baseline while coding proceeds",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const observerAborted = gate();
     const lateObserver = gate();

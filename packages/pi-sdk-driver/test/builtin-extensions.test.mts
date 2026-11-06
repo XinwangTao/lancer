@@ -8,6 +8,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { gatedBuiltinExtensions, type BuiltinExtension } from "../dist/builtin-extensions.js";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { RuntimeSupervisor } from "../dist/runtime-supervisor.js";
+import { RUNTIME_TEST_TIMEOUT_MS } from "./timeouts.mts";
 
 const DEMO: BuiltinExtension = {
   name: "pi-gui-demo",
@@ -94,7 +95,7 @@ await test("Settings lists a switched-off built-in with its tools and name", asy
 
 await test(
   "a session loads a built-in only while it is switched on, rechecked on reload",
-  { timeout: 10_000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const { agentDir, workspacePath } = await createDirs();
     await writeFile(

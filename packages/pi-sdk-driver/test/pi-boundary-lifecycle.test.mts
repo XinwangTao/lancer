@@ -13,6 +13,7 @@ import type {
 import type { SessionDriverEvent } from "@lancer/session-driver";
 import { PiSdkDriver } from "../dist/pi-sdk-driver.js";
 import { createAgentSessionRuntimeWithNpmFallback } from "../dist/npm-package-fallback.js";
+import { RUNTIME_TEST_TIMEOUT_MS } from "./timeouts.mts";
 
 type StreamFunction = AgentSessionRuntime["session"]["agent"]["streamFunction"];
 
@@ -216,7 +217,7 @@ async function assertPersistedAssistantIdentity(h: Awaited<ReturnType<typeof fix
 
 await test(
   "before-settle continuation stays running and completes once with the original run id",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const beforeSettle = gate();
     const continueRun = gate();
@@ -327,7 +328,7 @@ await test(
 
 await test(
   "a retryable attempt keeps the run id and reports only the eventual success",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const retryStarted = gate();
     const finishRetry = gate();
@@ -373,7 +374,7 @@ await test(
 
 await test(
   "an extension turn started after settlement receives a distinct desktop run id",
-  { timeout: 15000 },
+  { timeout: RUNTIME_TEST_TIMEOUT_MS },
   async (t) => {
     const secondStarted = gate();
     const finishSecond = gate();
