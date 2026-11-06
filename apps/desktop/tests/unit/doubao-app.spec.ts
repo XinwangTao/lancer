@@ -9,6 +9,7 @@ import {
   type NativeDoubaoSnapshot,
 } from "../../electron/doubao-app/native-client";
 import { createDownloadDirectory, DoubaoVideoReceiver } from "../../electron/doubao-app/videos";
+import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
 
 const target = { workspaceId: "w", sessionId: "s" };
 function response(overrides: Partial<NativeDoubaoSnapshot> = {}): NativeDoubaoSnapshot {
@@ -158,7 +159,7 @@ test("unchanged refresh does not rewrite persistence and downloads are appended 
   expect(texts[0]).toBe("plain");
   expect(texts[1]).toContain(bound.binding!.downloadDirectory);
 });
-test("received media is hashed, cached, target-only open is revalidated, and symlinks cannot escape", async () => {
+test("received media is hashed, cached, and target-only open is revalidated", async () => {
   let probes = 0;
   const opened: string[] = [];
   const learned: string[] = [];
@@ -204,6 +205,13 @@ test("received media is hashed, cached, target-only open is revalidated, and sym
   await expect(service.openVideo(target, received.videos[0]!.id)).rejects.toThrow(
     "E_VIDEO_CHANGED",
   );
+});
+
+test("received media and download roots reject symlink escapes", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  const f = await fixture(async () => response());
+  const bound = await f.service.bind({ target });
+  const directory = bound.binding!.downloadDirectory;
   const outside = path.join(f.root, "external.mp4");
   await writeFile(outside, "outside");
   await symlink(outside, path.join(directory, "link.mp4"));

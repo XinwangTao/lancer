@@ -7,6 +7,7 @@ import {
   recordMediaOperations,
   runMediaOperation,
 } from "../../electron/video-learn/media-operations";
+import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
 
 test("media operations retain the executed command, output, duration and a genuine failure", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "media-operations-"));
@@ -31,13 +32,20 @@ test("media operations retain the executed command, output, duration and a genui
   expect(readMediaOperations(root, "historical-run-without-trace")).toEqual([]);
 });
 
-test("media trace ignores oversized or outside-project files", () => {
+test("media trace ignores an oversized operations file", () => {
   const root = mkdtempSync(path.join(tmpdir(), "media-trace-bounds-"));
   const directory = path.join(root, "learning", "video-test");
   mkdirSync(directory, { recursive: true });
   const file = path.join(directory, "media-operations.json");
   writeFileSync(file, " ".repeat(65000));
   expect(readMediaOperations(root, "video-test")).toEqual([]);
+});
+
+test("media trace ignores an outside-project symlinked run", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  const root = mkdtempSync(path.join(tmpdir(), "media-trace-bounds-"));
+  const directory = path.join(root, "learning", "video-test");
+  mkdirSync(directory, { recursive: true });
   const outside = mkdtempSync(path.join(tmpdir(), "media-trace-outside-"));
   writeFileSync(
     path.join(outside, "media-operations.json"),

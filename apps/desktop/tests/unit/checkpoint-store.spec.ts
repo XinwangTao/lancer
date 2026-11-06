@@ -21,6 +21,7 @@ import {
   TurnCheckpointStore,
   type CheckpointCapture,
 } from "../../electron/workbench/checkpoint-store";
+import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
 
 async function git(cwd: string, args: string[], input?: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -88,6 +89,10 @@ function boundary(
 }
 
 test("captures raw bytes, modes, symlink targets and deletions without changing source Git state", async () => {
+  test.skip(
+    process.platform === "win32",
+    "Windows records neither POSIX modes nor unprivileged symlinks.",
+  );
   const { directory, workspace, store } = await fixture();
   await writeFile(join(workspace, "raw.txt"), "base\n");
   await writeFile(join(workspace, "deleted.txt"), "base\n");
@@ -245,6 +250,10 @@ test("an untracked nested repository is skipped with a coverage note instead of 
 });
 
 test("private batching handles spaces and newlines in storage roots and source filenames", async () => {
+  test.skip(
+    process.platform === "win32",
+    "Windows rejects the tab, quote and newline characters this fixture requires.",
+  );
   const { directory, workspace } = await fixture();
   const userData = join(directory, 'app data\n"quoted"');
   const store = new TurnCheckpointStore(userData, { timeoutMs: 10_000 });
@@ -454,8 +463,8 @@ test("submodules remain explicitly unavailable", async () => {
   expect(await store.capture(workspace)).toMatchObject({ state: "unavailable", code: "submodule" });
 });
 
-test("sparse, conflicted and directory-symlink checkouts remain explicitly unavailable", async () => {
-  const { directory, workspace, store } = await fixture();
+test("sparse and conflicted checkouts remain explicitly unavailable", async () => {
+  const { workspace, store } = await fixture();
   await mkdir(join(workspace, "nested"));
   await writeFile(join(workspace, "nested", "file.txt"), "base");
   await git(workspace, ["add", "."]);
@@ -477,7 +486,14 @@ test("sparse, conflicted and directory-symlink checkouts remain explicitly unava
     code: "conflicted-checkout",
   });
   expect(await readFile(join(workspace, ".git", "index"))).toEqual(conflictedIndex);
-  await git(workspace, ["add", "nested/file.txt"]);
+});
+
+test("a directory replaced by a symlink remains explicitly unavailable", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  const { directory, workspace, store } = await fixture();
+  await mkdir(join(workspace, "nested"));
+  await writeFile(join(workspace, "nested", "file.txt"), "base");
+  await git(workspace, ["add", "."]);
   await rename(join(workspace, "nested"), join(directory, "outside"));
   await symlink(join(directory, "outside"), join(workspace, "nested"));
   expect(await store.capture(workspace)).toMatchObject({
@@ -681,10 +697,17 @@ test("incremental captures reread only changed files and still see same-size rew
   expect(await git(store.repositoryPath, ["show", `${changed.treeOid}:keep.txt`])).toEqual(
     Buffer.from("keep.txt original"),
   );
+});
 
-  // A tracked directory replaced by a symlink is refused even though its file is unchanged.
-  await rename(join(workspace, "nested"), join(workspace, "..", "moved-nested"));
-  await symlink(join(workspace, "..", "moved-nested"), join(workspace, "nested"));
+test("a tracked directory replaced by a symlink is refused even when its file is unchanged", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  const { directory, workspace, store } = await fixture();
+  await mkdir(join(workspace, "nested"));
+  await writeFile(join(workspace, "nested", "deep.txt"), "deep");
+  await git(workspace, ["add", "."]);
+  available(await store.capture(workspace));
+  await rename(join(workspace, "nested"), join(directory, "moved-nested"));
+  await symlink(join(directory, "moved-nested"), join(workspace, "nested"));
   expect(await store.capture(workspace)).toMatchObject({
     state: "unavailable",
     code: "unsafe-symlink",

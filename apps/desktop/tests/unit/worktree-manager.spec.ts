@@ -8,6 +8,7 @@ import type { CatalogStorage, WorktreeCatalogEntry } from "@lancer/catalogs";
 import type { WorkspaceRef } from "@lancer/session-driver";
 import { appWorktreeRootMatcher } from "../../electron/platform/worktrees/app-worktree-roots";
 import { GitWorktreeManager } from "../../electron/platform/worktrees/worktree-manager";
+import { canCreateSymlinks, SYMLINK_SKIP_REASON } from "../helpers/platform";
 
 const execFileAsync = promisify(execFile);
 
@@ -244,6 +245,15 @@ test("app worktree paths are matched inside the profile root only, even before i
     expect(await isAppWorktreePath(join(root, "worktrees"))).toBe(false);
     expect(await isAppWorktreePath(join(root, "worktrees-old", "repo", "task-1"))).toBe(false);
     expect(await isAppWorktreePath(join(root, "worktrees", "..", "repo"))).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a profile root reached through a symlink still matches resolved Git paths", async () => {
+  test.skip(!(await canCreateSymlinks()), SYMLINK_SKIP_REASON);
+  const root = await mkdtemp(join(tmpdir(), "wt-roots-"));
+  try {
     // Git reports resolved paths; a root reached through a symlink must still match.
     await mkdir(join(root, "real", "worktrees", "repo", "task-2"), { recursive: true });
     await symlink(join(root, "real"), join(root, "linked"));
