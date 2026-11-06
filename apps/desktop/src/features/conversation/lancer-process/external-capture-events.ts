@@ -3,6 +3,8 @@ import type { ProcessEvent } from "./process-types";
 
 export interface ExternalCaptureLaneNode {
   readonly id: string;
+  /** Native entry time, reused so the capture point sorts with transcript events. */
+  readonly timestamp?: string;
 }
 
 export interface ExternalCaptureEventsInput {
@@ -34,14 +36,25 @@ export function externalCaptureEvents(input: ExternalCaptureEventsInput): Proces
       }
     }
     const baseRow = anchor >= 0 ? anchor + 1 : nodes.length;
+    // `parallelTreeEvents` re-sorts by evidence timestamp, so a point without one would
+    // jump ahead of every timestamped native entry. Reuse the anchor's time to keep the
+    // capture beside the turn it belongs to, and the lane's last time when it has no
+    // matching entry so it stays at the end instead of the top.
+    const anchorNode = anchor >= 0 ? nodes[anchor] : undefined;
+    const evidenceTimestamp = anchorNode?.timestamp || nodes.at(-1)?.timestamp;
+    // Without an anchor the point belongs after the final native entry; index -1 would
+    // sort it before the lane instead.
+    const baseIndex = anchor >= 0 ? anchor : nodes.length - 1;
     files.forEach((file, offset) => {
       // Fractional rows keep external points between native nodes instead of landing
       // on the same row (and therefore the same pixel) as the next one.
-      const row = baseRow + (offset + 1) / (files.length + 1);
+      const fraction = (offset + 1) / (files.length + 1);
+      const row = baseRow + fraction;
       const label = file.originLabel ?? input.fallbackLabel;
       events.push({
         id: `external:${turn.checkpointId}:${file.path}`,
-        index: anchor + (offset + 1) / 1000,
+        index: baseIndex + fraction,
+        evidenceTimestamp,
         time: 0.5 + (row / Math.max(1, input.laneLength - 1)) * 25,
         row,
         lane: input.lane,
